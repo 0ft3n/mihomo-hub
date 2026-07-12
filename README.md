@@ -20,7 +20,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Откройте `http://localhost:8080`. Для HTTPS разместите Caddy, Traefik или nginx перед портом приложения. Быстрая установка на чистом Debian/Ubuntu:
+Установщик для Debian/Ubuntu ставит Docker, запрашивает домен, запускает приложение и настраивает автоматический HTTPS через Caddy. До запуска направьте A/AAAA-запись домена на сервер и откройте входящие порты 80 и 443:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0ft3n/mihomo-hub/main/install.sh | sudo bash
