@@ -480,6 +480,8 @@ function Editor({
   const [rules, setRules] = useState<string[]>(
     profile.modifications.rules || [],
   );
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
   const [overrides, setOverrides] = useState(
     stringifyYaml(profile.modifications.overrides || {}, { lineWidth: 120 }),
   );
@@ -534,6 +536,48 @@ function Editor({
   });
   const [err, setErr] = useState("");
   const suggestions = useMemo(() => proxies.slice(0, 60), [proxies]);
+  const parsedBulkRules = useMemo(() => {
+    if (!bulkText.trim()) return [];
+    try {
+      const parsed = parseYaml(bulkText);
+      const candidate: unknown[] | null = Array.isArray(parsed)
+        ? parsed
+        : parsed && Array.isArray(parsed.rules)
+          ? parsed.rules
+          : null;
+      if (candidate) {
+        return candidate
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter((item) => item.includes(","));
+      }
+    } catch {
+      // Plain Mihomo lists are parsed line-by-line below.
+    }
+    return bulkText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && line !== "rules:" && !line.startsWith("#"))
+      .map((line) => line.replace(/^[-*]\s+/, "").trim())
+      .map((line) =>
+        /^(['"]).*\1$/.test(line) ? line.slice(1, -1).trim() : line,
+      )
+      .filter((line) => line.includes(","));
+  }, [bulkText]);
+  function applyBulkRules(mode: "append" | "replace") {
+    if (!parsedBulkRules.length) {
+      setErr("Не найдено ни одного правила Mihomo");
+      return;
+    }
+    setRules(
+      mode === "replace"
+        ? [...new Set(parsedBulkRules)]
+        : [...new Set([...rules, ...parsedBulkRules])],
+    );
+    setBulkText("");
+    setBulkOpen(false);
+    setErr("");
+  }
   function toggleOverride(key: string, checked: boolean) {
     try {
       const current = parseYaml(overrides) || {};
@@ -675,6 +719,47 @@ function Editor({
           <p className="hint">
             Формат Mihomo, например: DOMAIN-SUFFIX,google.com,Имя прокси
           </p>
+          <div className="bulkRules">
+            <button
+              className={bulkOpen ? "bulkToggle active" : "bulkToggle"}
+              onClick={() => setBulkOpen(!bulkOpen)}
+            >
+              <Clipboard /> Вставить список правил
+            </button>
+            {bulkOpen && (
+              <div className="bulkPanel">
+                <textarea
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                  placeholder={
+                    "- DOMAIN,example.com,🚀 Main\n- GEOSITE,telegram,🚀 Main\n- MATCH,DIRECT"
+                  }
+                  spellCheck={false}
+                  autoFocus
+                />
+                <div className="bulkFooter">
+                  <span>
+                    Распознано: <b>{parsedBulkRules.length}</b>
+                  </span>
+                  <div>
+                    <button
+                      disabled={!parsedBulkRules.length}
+                      onClick={() => applyBulkRules("replace")}
+                    >
+                      Заменить текущие
+                    </button>
+                    <button
+                      className="primary"
+                      disabled={!parsedBulkRules.length}
+                      onClick={() => applyBulkRules("append")}
+                    >
+                      <CirclePlus /> Добавить без дублей
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
           {rules.map((r, i) => (
             <div className="rule" key={i}>
               <input
