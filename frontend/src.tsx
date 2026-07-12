@@ -23,6 +23,8 @@ import {
   Sun,
   Trash2,
 } from "lucide-react";
+import MonacoEditor from "@monaco-editor/react";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import "./style.css";
 
 const API = "/api";
@@ -291,6 +293,7 @@ function Subscription({ sub, reload }: { sub: Sub; reload: () => void }) {
       <Editor
         profile={edit}
         proxies={data.source_meta.proxy_names || []}
+        sourceYaml={data.yaml || ""}
         back={() => setEdit(undefined)}
         saved={() => {
           setEdit(undefined);
@@ -463,11 +466,13 @@ function Empty() {
 function Editor({
   profile,
   proxies,
+  sourceYaml,
   back,
   saved,
 }: {
   profile: Profile;
   proxies: string[];
+  sourceYaml: string;
   back: () => void;
   saved: () => void;
 }) {
@@ -476,7 +481,35 @@ function Editor({
     profile.modifications.rules || [],
   );
   const [overrides, setOverrides] = useState(
-    JSON.stringify(profile.modifications.overrides || {}, null, 2),
+    stringifyYaml(profile.modifications.overrides || {}, { lineWidth: 120 }),
+  );
+  const [overrideSearch, setOverrideSearch] = useState("");
+  const sourceConfig = useMemo<Record<string, any>>(() => {
+    try {
+      const parsed = parseYaml(sourceYaml);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed
+        : {};
+    } catch {
+      return {};
+    }
+  }, [sourceYaml]);
+  const overrideConfig = useMemo<Record<string, any>>(() => {
+    try {
+      const parsed = parseYaml(overrides);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed
+        : {};
+    } catch {
+      return {};
+    }
+  }, [overrides]);
+  const sourceKeys = useMemo(
+    () =>
+      Object.keys(sourceConfig).filter((key) =>
+        key.toLowerCase().includes(overrideSearch.toLowerCase()),
+      ),
+    [sourceConfig, overrideSearch],
   );
   const currentGeo = profile.modifications.geo || {};
   const [geo, setGeo] = useState(currentGeo.mode ?? true);
@@ -501,9 +534,26 @@ function Editor({
   });
   const [err, setErr] = useState("");
   const suggestions = useMemo(() => proxies.slice(0, 60), [proxies]);
+  function toggleOverride(key: string, checked: boolean) {
+    try {
+      const current = parseYaml(overrides) || {};
+      if (typeof current !== "object" || Array.isArray(current)) {
+        throw new Error("Корень переопределений должен быть YAML-объектом");
+      }
+      if (checked) current[key] = structuredClone(sourceConfig[key]);
+      else delete current[key];
+      setOverrides(stringifyYaml(current, { lineWidth: 120 }));
+      setErr("");
+    } catch (e: any) {
+      setErr(e.message || "Исправьте синтаксис YAML перед выбором ключа");
+    }
+  }
   async function save() {
     try {
-      const parsed = JSON.parse(overrides);
+      const parsed = parseYaml(overrides) || {};
+      if (typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Переопределения должны быть YAML-объектом");
+      }
       await api(`/profiles/${profile.id}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -653,17 +703,65 @@ function Editor({
             Добавить правило
           </button>
         </section>
-        <section className="panel form">
+        <section className="panel form yamlOverride">
           <h3>Переопределения YAML</h3>
           <p className="hint">
-            JSON-объект объединяется с исходной конфигурацией. Значение null
-            удаляет ключ.
+            Выберите секции исходной подписки слева, затем измените их значения
+            в редакторе. Значение null удаляет ключ.
           </p>
-          <textarea
-            value={overrides}
-            onChange={(e) => setOverrides(e.target.value)}
-            spellCheck={false}
-          />
+          <div className="overrideWorkspace">
+            <aside className="overrideKeys">
+              <div className="overrideKeysTitle">КЛЮЧИ КОНФИГА</div>
+              <input
+                value={overrideSearch}
+                onChange={(e) => setOverrideSearch(e.target.value)}
+                placeholder="Поиск ключа..."
+              />
+              <div className="overrideKeyList">
+                {sourceKeys.map((key) => (
+                  <label key={key} title={key}>
+                    <input
+                      type="checkbox"
+                      checked={Object.prototype.hasOwnProperty.call(
+                        overrideConfig,
+                        key,
+                      )}
+                      onChange={(e) => toggleOverride(key, e.target.checked)}
+                    />
+                    <code>{key}</code>
+                  </label>
+                ))}
+              </div>
+            </aside>
+            <div className="monacoPane">
+              <div className="editorTab">
+                <Code2 /> overrides.yaml
+                <span>{Object.keys(overrideConfig).length} секций</span>
+              </div>
+              <MonacoEditor
+                height="430px"
+                language="yaml"
+                theme={
+                  document.documentElement.dataset.theme === "light"
+                    ? "light"
+                    : "vs-dark"
+                }
+                value={overrides}
+                onChange={(value) => setOverrides(value || "")}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 13,
+                  lineHeight: 21,
+                  tabSize: 2,
+                  insertSpaces: true,
+                  wordWrap: "on",
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  padding: { top: 12 },
+                }}
+              />
+            </div>
+          </div>
           {err && <div className="error">{err}</div>}
           <div className="callout">
             <Shield />
