@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mihomohub
+      POSTGRES_USER: mihomohub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck: {test: [CMD-SHELL, "pg_isready -U mihomohub"], interval: 5s, timeout: 5s, retries: 10}
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://mihomohub:${POSTGRES_PASSWORD}@postgres:5432/mihomohub
+      SECRET_KEY: ${SECRET_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      PUBLIC_URL: ${PUBLIC_URL}
+    depends_on:
+      postgres: {condition: service_healthy}
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    ports: ["${HTTP_PORT:-8080}:80"]
+    depends_on: [backend]
+volumes: {postgres_data: {}}
