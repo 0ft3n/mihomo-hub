@@ -21,9 +21,11 @@ else
 fi
 cd "$INSTALL_DIR"
 if [[ ! -f .env ]]; then
-  read -rp "Публичный URL (например https://vpn.example.com): " PUBLIC_URL
-  read -rp "HTTP-порт [8080]: " HTTP_PORT; HTTP_PORT="${HTTP_PORT:-8080}"
-  read -rsp "Пароль администратора: " ADMIN_PASSWORD; echo
+  [[ -r /dev/tty ]] || die "Для первой установки требуется интерактивный терминал."
+  read -rp "Публичный URL (например https://vpn.example.com): " PUBLIC_URL </dev/tty
+  read -rp "HTTP-порт [8080]: " HTTP_PORT </dev/tty; HTTP_PORT="${HTTP_PORT:-8080}"
+  [[ "$HTTP_PORT" =~ ^[0-9]+$ ]] && (( HTTP_PORT >= 1 && HTTP_PORT <= 65535 )) || die "HTTP-порт должен быть числом от 1 до 65535."
+  read -rsp "Пароль администратора: " ADMIN_PASSWORD </dev/tty; echo >/dev/tty
   [[ -n "$ADMIN_PASSWORD" ]] || die "Пароль администратора не может быть пустым."
   umask 077
   cat > .env <<EOF
@@ -37,4 +39,5 @@ fi
 say "Собираю и запускаю контейнеры..."
 docker compose up -d --build --remove-orphans
 say "Готово. Откройте $(grep '^PUBLIC_URL=' .env | cut -d= -f2-)"
-say "Команды: cd $INSTALL_DIR && docker compose logs -f | docker compose pull"
+say "Логи: cd $INSTALL_DIR && docker compose logs -f"
+say "Обновление: cd $INSTALL_DIR && git pull --ff-only && docker compose up -d --build"
