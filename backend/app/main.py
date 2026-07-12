@@ -12,7 +12,7 @@ from .database import Base, engine, get_db
 from .models import Account, Profile, Setting, Subscription
 from .schemas import ImportRequest, LoginRequest, ProfileIn, ProfileUpdate, SubscriptionUpdate
 from .security import current_account_id, make_session, require_admin
-from .yaml_service import apply_modifications, fetch_yaml, summarize
+from .yaml_service import apply_modifications, fetch_yaml, subscription_meta
 
 app = FastAPI(title="Mihomo Hub", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -60,13 +60,13 @@ async def initial_import(body: ImportRequest, db: Session = Depends(get_db)):
     existing = db.scalar(select(Subscription).where(Subscription.source_url == url))
     if existing:
         return {"token": make_session(existing.account_id), "account_key": existing.account.access_token}
-    raw, parsed = await fetch_yaml(url)
+    raw, parsed, headers = await fetch_yaml(url)
     account = Account()
     db.add(account)
     db.flush()
     defaults = db.get(Setting, 1).default_modifications
     sub = Subscription(account_id=account.id, source_url=url, name=name_from_url(url),
-                       cached_yaml=raw, source_meta=summarize(parsed))
+                       cached_yaml=raw, source_meta=subscription_meta(parsed, headers))
     db.add(sub)
     db.flush()
     db.add(Profile(subscription_id=sub.id, name="Основной профиль", modifications=defaults))
@@ -101,9 +101,9 @@ async def add_subscription(body: ImportRequest, account_id: int = Depends(curren
     url = str(body.url)
     if db.scalar(select(Subscription).where(Subscription.source_url == url)):
         raise HTTPException(409, "Эта подписка уже добавлена")
-    raw, parsed = await fetch_yaml(url)
+    raw, parsed, headers = await fetch_yaml(url)
     sub = Subscription(account_id=account_id, source_url=url, name=name_from_url(url),
-                       cached_yaml=raw, source_meta=summarize(parsed))
+                       cached_yaml=raw, source_meta=subscription_meta(parsed, headers))
     db.add(sub); db.flush()
     db.add(Profile(subscription_id=sub.id, name="Основной профиль", modifications=db.get(Setting, 1).default_modifications))
     db.commit()
@@ -131,8 +131,10 @@ def update_subscription(sub_id: int, body: SubscriptionUpdate, account_id: int =
 @app.post("/api/subscriptions/{sub_id}/refresh")
 async def refresh(sub_id: int, account_id: int = Depends(current_account_id), db: Session = Depends(get_db)):
     sub = owned_subscription(db, sub_id, account_id)
-    raw, parsed = await fetch_yaml(sub.source_url)
-    sub.cached_yaml, sub.source_meta, sub.updated_at = raw, summarize(parsed), datetime.now(timezone.utc)
+    raw, parsed, headers = await fetch_yaml(sub.source_url)
+    sub.cached_yaml = raw
+    sub.source_meta = subscription_meta(parsed, headers, sub.source_meta)
+    sub.updated_at = datetime.now(timezone.utc)
     db.commit(); return serialize_subscription(sub, True)
 
 
@@ -172,13 +174,20 @@ async def public_subscription(slug: str, db: Session = Depends(get_db)):
     if not p: raise HTTPException(404, "Подписка не найдена или отключена")
     sub = p.subscription
     try:
-        raw, parsed = await fetch_yaml(sub.source_url)
-        sub.cached_yaml, sub.source_meta = raw, summarize(parsed); db.commit()
+        raw, parsed, upstream_headers = await fetch_yaml(sub.source_url)
+        sub.cached_yaml = raw
+        sub.source_meta = subscription_meta(parsed, upstream_headers, sub.source_meta)
+        db.commit()
     except Exception:
         raw = sub.cached_yaml
+        upstream_headers = sub.source_meta.get("response_headers", {})
     if not raw: raise HTTPException(502, "Источник подписки временно недоступен")
     rendered = apply_modifications(raw, p.modifications)
-    return Response(rendered, media_type="text/yaml; charset=utf-8", headers={"Content-Disposition": "inline; filename=profile.yaml", "Profile-Update-Interval": "24"})
+    response_headers = {"Content-Disposition": "inline; filename=profile.yaml"}
+    for key, value in upstream_headers.items():
+        response_headers[key] = value
+    response_headers.setdefault("profile-update-interval", "24")
+    return Response(rendered, media_type="text/yaml; charset=utf-8", headers=response_headers)
 
 
 @app.get("/api/admin/overview", dependencies=[Depends(require_admin)])

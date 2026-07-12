@@ -340,6 +340,7 @@ function Subscription({ sub, reload }: { sub: Sub; reload: () => void }) {
             />
             <Metric icon={<Activity />} name="Статус" value="Активна" good />
           </section>
+          <SubscriptionUsage info={data.source_meta.subscription} />
           <section className="panel source">
             <div>
               <span className="panelIcon">
@@ -352,9 +353,13 @@ function Subscription({ sub, reload }: { sub: Sub; reload: () => void }) {
             </div>
             <button
               onClick={async () => {
-                await api(`/subscriptions/${sub.id}/refresh`, {
-                  method: "POST",
-                });
+                const refreshed = await api(
+                  `/subscriptions/${sub.id}/refresh`,
+                  {
+                    method: "POST",
+                  },
+                );
+                setFull(refreshed);
                 reload();
               }}
             >
@@ -435,6 +440,71 @@ function Metric({ icon, name, value, good = false }: any) {
         <small>{name}</small>
       </div>
     </div>
+  );
+}
+
+function formatBytes(value: number | null | undefined) {
+  if (value == null) return "Без лимита";
+  if (value === 0) return "0 Б";
+  const units = ["Б", "КБ", "МБ", "ГБ", "ТБ", "ПБ"];
+  const index = Math.min(
+    Math.floor(Math.log(value) / Math.log(1024)),
+    units.length - 1,
+  );
+  return `${(value / 1024 ** index).toFixed(index > 2 ? 2 : 1)} ${units[index]}`;
+}
+
+function SubscriptionUsage({ info }: { info?: any }) {
+  if (!info) {
+    return (
+      <section className="panel usagePanel unavailable">
+        <Activity />
+        <div>
+          <b>Лимиты подписки недоступны</b>
+          <small>Провайдер не передал заголовок Subscription-Userinfo</small>
+        </div>
+      </section>
+    );
+  }
+  const percent = info.total
+    ? Math.min((info.used / info.total) * 100, 100)
+    : 0;
+  const expires = info.expire_at ? new Date(info.expire_at) : null;
+  const expired = expires ? expires.getTime() < Date.now() : false;
+  return (
+    <section className="panel usagePanel">
+      <div className="usageSummary">
+        <div>
+          <small>Осталось трафика</small>
+          <b>{formatBytes(info.remaining)}</b>
+        </div>
+        <div>
+          <small>Использовано</small>
+          <b>{formatBytes(info.used)}</b>
+        </div>
+        <div>
+          <small>Общий лимит</small>
+          <b>{info.total ? formatBytes(info.total) : "Без лимита"}</b>
+        </div>
+        <div className={expired ? "expired" : ""}>
+          <small>Действует до</small>
+          <b>
+            {expires
+              ? expires.toLocaleString("ru-RU", {
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })
+              : "Без срока"}
+          </b>
+        </div>
+      </div>
+      {info.total > 0 && (
+        <div className="usageTrack">
+          <i style={{ width: `${percent}%` }} />
+        </div>
+      )}
+    </section>
   );
 }
 function Yaml({ text }: { text: string }) {

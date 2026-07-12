@@ -1,4 +1,5 @@
 from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any
 import httpx
 import yaml
@@ -8,7 +9,14 @@ from .config import settings
 from .security import validate_public_url
 
 
-async def fetch_yaml(url: str) -> tuple[str, dict[str, Any]]:
+FORWARDED_SUBSCRIPTION_HEADERS = (
+    "subscription-userinfo",
+    "profile-update-interval",
+    "profile-web-page-url",
+)
+
+
+async def fetch_yaml(url: str) -> tuple[str, dict[str, Any], dict[str, str]]:
     current = url
     async with httpx.AsyncClient(follow_redirects=False, timeout=settings.fetch_timeout) as client:
         for _ in range(6):
@@ -39,7 +47,12 @@ async def fetch_yaml(url: str) -> tuple[str, dict[str, Any]]:
         raise HTTPException(422, "Источник вернул некорректный YAML") from exc
     if not isinstance(data, dict) or not isinstance(data.get("proxies"), list):
         raise HTTPException(422, "Это не конфигурация Clash/Mihomo: отсутствует proxies")
-    return text, data
+    headers = {
+        key: response.headers[key]
+        for key in FORWARDED_SUBSCRIPTION_HEADERS
+        if key in response.headers
+    }
+    return text, data, headers
 
 
 def deep_merge(target: dict, patch: dict) -> dict:
@@ -80,3 +93,34 @@ def summarize(data: dict) -> dict:
         "proxy_names": [p.get("name", "Без имени") for p in proxies if isinstance(p, dict)],
         "proxy_types": sorted({p.get("type", "unknown") for p in proxies if isinstance(p, dict)}),
     }
+
+
+def subscription_meta(data: dict, headers: dict[str, str], previous: dict | None = None) -> dict:
+    result = summarize(data)
+    forwarded = {key: value for key, value in headers.items() if value}
+    if not forwarded and previous:
+        forwarded = previous.get("response_headers", {})
+    result["response_headers"] = forwarded
+    raw = forwarded.get("subscription-userinfo", "")
+    values: dict[str, int] = {}
+    for part in raw.split(";"):
+        key, separator, value = part.strip().partition("=")
+        if separator and value.strip().isdigit():
+            values[key.strip().lower()] = int(value.strip())
+    if values:
+        upload = values.get("upload", 0)
+        download = values.get("download", 0)
+        total = values.get("total", 0)
+        expire = values.get("expire", 0)
+        result["subscription"] = {
+            "upload": upload,
+            "download": download,
+            "used": upload + download,
+            "total": total,
+            "remaining": max(total - upload - download, 0) if total else None,
+            "expire": expire,
+            "expire_at": datetime.fromtimestamp(expire, timezone.utc).isoformat() if expire else None,
+        }
+    elif previous and previous.get("subscription"):
+        result["subscription"] = previous["subscription"]
+    return result
