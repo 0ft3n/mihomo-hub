@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 INSTALL_DIR="${MIHOMO_HUB_DIR:-/opt/mihomo-hub}"
-REPO_URL="${MIHOMO_HUB_REPO:-https://github.com/your-org/mihomo-hub.git}"
+REPO_URL="${MIHOMO_HUB_REPO:-https://github.com/0ft3n/mihomo-hub.git}"
 say(){ printf '\033[1;36m[Mihomo Hub]\033[0m %s\n' "$*"; }
 die(){ printf '\033[1;31mОшибка:\033[0m %s\n' "$*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || die "Запустите скрипт через sudo."

@@ -23,10 +23,8 @@ docker compose up -d --build
 Откройте `http://localhost:8080`. Для HTTPS разместите Caddy, Traefik или nginx перед портом приложения. Быстрая установка на чистом Debian/Ubuntu:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-org/mihomo-hub/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/0ft3n/mihomo-hub/main/install.sh | sudo bash
 ```
-
-Перед публикацией замените `your-org` в `install.sh` и README на адрес репозитория.
 
 ## Модификаторы
 
