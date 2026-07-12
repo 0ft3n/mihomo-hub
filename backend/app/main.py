@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 import secrets
+import re
 import yaml
+from urllib.parse import unquote, urlparse
 from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
@@ -16,13 +18,22 @@ app = FastAPI(title="Mihomo Hub", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
+def name_from_url(url: str) -> str:
+    """Use the provider's opaque subscription id without exposing its domain."""
+    value = unquote(urlparse(url).path.rstrip("/").split("/")[-1]).strip()
+    return value[:160] if value else (urlparse(url).hostname or "Подписка")[:160]
+
+
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(engine)
     with Session(engine) as db:
         if not db.get(Setting, 1):
             db.add(Setting(id=1, default_modifications={"rules": [], "overrides": {}}))
-            db.commit()
+        for sub in db.scalars(select(Subscription)).all():
+            if re.fullmatch(r"Подписка \d+ узлов", sub.name):
+                sub.name = name_from_url(sub.source_url)
+        db.commit()
 
 
 def serialize_profile(p: Profile):
@@ -54,7 +65,7 @@ async def initial_import(body: ImportRequest, db: Session = Depends(get_db)):
     db.add(account)
     db.flush()
     defaults = db.get(Setting, 1).default_modifications
-    sub = Subscription(account_id=account.id, source_url=url, name=f"Подписка {len(parsed['proxies'])} узлов",
+    sub = Subscription(account_id=account.id, source_url=url, name=name_from_url(url),
                        cached_yaml=raw, source_meta=summarize(parsed))
     db.add(sub)
     db.flush()
@@ -91,7 +102,7 @@ async def add_subscription(body: ImportRequest, account_id: int = Depends(curren
     if db.scalar(select(Subscription).where(Subscription.source_url == url)):
         raise HTTPException(409, "Эта подписка уже добавлена")
     raw, parsed = await fetch_yaml(url)
-    sub = Subscription(account_id=account_id, source_url=url, name=f"Подписка {len(parsed['proxies'])} узлов",
+    sub = Subscription(account_id=account_id, source_url=url, name=name_from_url(url),
                        cached_yaml=raw, source_meta=summarize(parsed))
     db.add(sub); db.flush()
     db.add(Profile(subscription_id=sub.id, name="Основной профиль", modifications=db.get(Setting, 1).default_modifications))

@@ -1,33 +1,767 @@
-import React, {useEffect, useMemo, useState} from 'react';
-import {createRoot} from 'react-dom/client';
-import {Activity, ChevronRight, CirclePlus, Clipboard, Code2, Database, ExternalLink, FileCog, Globe2, KeyRound, LayoutDashboard, LogOut, Moon, RefreshCw, Route, Save, Server, Settings, Shield, Sun, Trash2} from 'lucide-react';
-import './style.css';
+import React, { useEffect, useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  Activity,
+  ChevronRight,
+  CirclePlus,
+  Clipboard,
+  Code2,
+  Database,
+  ExternalLink,
+  FileCog,
+  Globe2,
+  KeyRound,
+  LayoutDashboard,
+  LogOut,
+  Moon,
+  RefreshCw,
+  Route,
+  Save,
+  Server,
+  Settings,
+  Shield,
+  Sun,
+  Trash2,
+} from "lucide-react";
+import "./style.css";
 
-const API='/api';
-type Profile={id:number,name:string,url:string,slug:string,enabled:boolean,modifications:any};
-type Sub={id:number,name:string,source_url:string,enabled:boolean,source_meta:any,profiles:Profile[],yaml?:string};
-const token=()=>localStorage.getItem('token');
-async function api(path:string, options:any={}) { const r=await fetch(API+path,{...options,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token()}`,...options.headers}}); if(!r.ok) throw new Error((await r.json().catch(()=>({}))).detail||'Ошибка запроса'); return r.status===204?null:r.json(); }
-
-function App(){
- const [authed,setAuthed]=useState(!!token()); const [subs,setSubs]=useState<Sub[]>([]); const [active,setActive]=useState<number>(); const [theme,setTheme]=useState(localStorage.getItem('theme')||'dark'); const [admin,setAdmin]=useState(false);
- useEffect(()=>{document.documentElement.dataset.theme=theme;localStorage.setItem('theme',theme)},[theme]);
- const load=()=>api('/subscriptions').then((x)=>{setSubs(x);if(!active&&x[0])setActive(x[0].id)}).catch(()=>{localStorage.removeItem('token');setAuthed(false)});
- useEffect(()=>{if(authed)load()},[authed]);
- if(!authed)return <Welcome onDone={()=>setAuthed(true)} theme={theme} flip={()=>setTheme(theme==='dark'?'light':'dark')}/>;
- const sub=subs.find(s=>s.id===active);
- return <div className="shell"><aside><div className="brand"><div className="logo"><Route size={19}/></div><b>Mihomo Hub</b></div><nav><span>РАБОЧЕЕ ПРОСТРАНСТВО</span><button className={!admin?'on':''} onClick={()=>setAdmin(false)}><LayoutDashboard/>Обзор</button><span>ПОДПИСКИ</span>{subs.map(s=><button className={!admin&&s.id===active?'on':''} onClick={()=>{setActive(s.id);setAdmin(false)}} key={s.id}><Server/>{s.name}<ChevronRight className="chev"/></button>)}<button className="subtle" onClick={async()=>{const u=prompt('URL новой подписки');if(u){await api('/subscriptions',{method:'POST',body:JSON.stringify({url:u})});load()}}}><CirclePlus/>Добавить подписку</button><span>СИСТЕМА</span><button className={admin?'on':''} onClick={()=>setAdmin(true)}><Shield/>Администрирование</button></nav><div className="asideBottom"><button onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun/>:<Moon/>}{theme==='dark'?'Светлая тема':'Тёмная тема'}</button><button onClick={()=>{localStorage.clear();setAuthed(false)}}><LogOut/>Выйти</button></div></aside><main><header><div><small>ПАНЕЛЬ УПРАВЛЕНИЯ</small><h2>{admin?'Администрирование':sub?.name||'Ваши подписки'}</h2></div><div className="status"><i/> Сервис работает</div></header>{admin?<Admin/>:sub?<Subscription sub={sub} reload={load}/>:<Empty/>}</main></div>
+const API = "/api";
+type Profile = {
+  id: number;
+  name: string;
+  url: string;
+  slug: string;
+  enabled: boolean;
+  modifications: any;
+};
+type Sub = {
+  id: number;
+  name: string;
+  source_url: string;
+  enabled: boolean;
+  source_meta: any;
+  profiles: Profile[];
+  yaml?: string;
+};
+const token = () => localStorage.getItem("token");
+async function api(path: string, options: any = {}) {
+  const r = await fetch(API + path, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token()}`,
+      ...options.headers,
+    },
+  });
+  if (!r.ok)
+    throw new Error(
+      (await r.json().catch(() => ({}))).detail || "Ошибка запроса",
+    );
+  return r.status === 204 ? null : r.json();
 }
 
-function Welcome({onDone,theme,flip}:{onDone:()=>void,theme:string,flip:()=>void}){const [url,setUrl]=useState('');const [busy,setBusy]=useState(false);const [err,setErr]=useState('');async function go(e:any){e.preventDefault();setBusy(true);setErr('');try{const r=await fetch(API+'/auth/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});const d=await r.json();if(!r.ok)throw Error(d.detail);localStorage.setItem('token',d.token);localStorage.setItem('account_key',d.account_key);onDone()}catch(e:any){setErr(e.message)}finally{setBusy(false)}}return <div className="welcome"><button className="theme" onClick={flip}>{theme==='dark'?<Sun/>:<Moon/>}</button><div className="welcomeCard"><div className="heroLogo"><Route/></div><div className="pill"><i/> SELF-HOSTED CONTROL PLANE</div><h1>Ваша подписка.<br/><em>Ваши правила.</em></h1><p>Подключите Clash/Mihomo-подписку и управляйте маршрутизацией, профилями и конфигурацией в одном месте.</p><form onSubmit={go}><label>Ссылка на подписку</label><div className="urlInput"><Globe2/><input required type="url" value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://provider.example/subscription"/><button disabled={busy}>{busy?<RefreshCw className="spin"/>:<ChevronRight/>}</button></div>{err&&<div className="error">{err}</div>}<small><Shield/> Ссылка шифруется и используется только для обновления конфигурации</small></form></div><div className="welcomeFoot"><span><FileCog/> Гибкие модификаторы</span><span><Route/> Умный роутинг</span><span><KeyRound/> Приватные ссылки</span></div></div>}
+function App() {
+  const [authed, setAuthed] = useState(!!token());
+  const [subs, setSubs] = useState<Sub[]>([]);
+  const [active, setActive] = useState<number>();
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
+  const [admin, setAdmin] = useState(false);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+  const load = () =>
+    api("/subscriptions")
+      .then((x) => {
+        setSubs(x);
+        if (!active && x[0]) setActive(x[0].id);
+      })
+      .catch(() => {
+        localStorage.removeItem("token");
+        setAuthed(false);
+      });
+  useEffect(() => {
+    if (authed) load();
+  }, [authed]);
+  if (!authed)
+    return (
+      <Welcome
+        onDone={() => setAuthed(true)}
+        theme={theme}
+        flip={() => setTheme(theme === "dark" ? "light" : "dark")}
+      />
+    );
+  const sub = subs.find((s) => s.id === active);
+  return (
+    <div className="shell">
+      <aside>
+        <div className="brand">
+          <div className="logo">
+            <Route size={19} />
+          </div>
+          <b>Mihomo Hub</b>
+        </div>
+        <nav>
+          <span>РАБОЧЕЕ ПРОСТРАНСТВО</span>
+          <button
+            className={!admin ? "on" : ""}
+            onClick={() => setAdmin(false)}
+          >
+            <LayoutDashboard />
+            Обзор
+          </button>
+          <span>ПОДПИСКИ</span>
+          {subs.map((s) => (
+            <button
+              className={!admin && s.id === active ? "on" : ""}
+              onClick={() => {
+                setActive(s.id);
+                setAdmin(false);
+              }}
+              key={s.id}
+            >
+              <Server />
+              {s.name}
+              <ChevronRight className="chev" />
+            </button>
+          ))}
+          <button
+            className="subtle"
+            onClick={async () => {
+              const u = prompt("URL новой подписки");
+              if (u) {
+                await api("/subscriptions", {
+                  method: "POST",
+                  body: JSON.stringify({ url: u }),
+                });
+                load();
+              }
+            }}
+          >
+            <CirclePlus />
+            Добавить подписку
+          </button>
+          <span>СИСТЕМА</span>
+          <button className={admin ? "on" : ""} onClick={() => setAdmin(true)}>
+            <Shield />
+            Администрирование
+          </button>
+        </nav>
+        <div className="asideBottom">
+          <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            {theme === "dark" ? <Sun /> : <Moon />}
+            {theme === "dark" ? "Светлая тема" : "Тёмная тема"}
+          </button>
+          <button
+            onClick={() => {
+              localStorage.clear();
+              setAuthed(false);
+            }}
+          >
+            <LogOut />
+            Выйти
+          </button>
+        </div>
+      </aside>
+      <main>
+        <header>
+          <div>
+            <small>ПАНЕЛЬ УПРАВЛЕНИЯ</small>
+            <h2>
+              {admin ? "Администрирование" : sub?.name || "Ваши подписки"}
+            </h2>
+          </div>
+          <div className="status">
+            <i /> Сервис работает
+          </div>
+        </header>
+        {admin ? (
+          <Admin />
+        ) : sub ? (
+          <Subscription sub={sub} reload={load} />
+        ) : (
+          <Empty />
+        )}
+      </main>
+    </div>
+  );
+}
 
-function Subscription({sub,reload}:{sub:Sub,reload:()=>void}){const [tab,setTab]=useState('overview');const [full,setFull]=useState<Sub>();const [edit,setEdit]=useState<Profile>();useEffect(()=>{api(`/subscriptions/${sub.id}`).then(setFull)},[sub.id]);const data=full||sub;if(edit)return <Editor profile={edit} proxies={data.source_meta.proxy_names||[]} back={()=>setEdit(undefined)} saved={()=>{setEdit(undefined);reload();api(`/subscriptions/${sub.id}`).then(setFull)}}/>;return <div className="page"><div className="tabs"><button className={tab==='overview'?'on':''} onClick={()=>setTab('overview')}>Обзор</button><button className={tab==='yaml'?'on':''} onClick={()=>setTab('yaml')}>Исходный YAML</button></div>{tab==='yaml'?<Yaml text={data.yaml||''}/>:<><section className="metrics"><Metric icon={<Server/>} name="Прокси-серверов" value={data.source_meta.proxy_count}/><Metric icon={<Route/>} name="Групп маршрутизации" value={data.source_meta.group_count}/><Metric icon={<FileCog/>} name="Правил" value={data.source_meta.rule_count}/><Metric icon={<Activity/>} name="Статус" value="Активна" good/></section><section className="panel source"><div><span className="panelIcon"><Database/></span><div><h3>Исходная подписка</h3><p>{data.source_url}</p></div></div><button onClick={async()=>{await api(`/subscriptions/${sub.id}/refresh`,{method:'POST'});reload()}}><RefreshCw/>Обновить</button></section><div className="sectionTitle"><div><h3>Профили конфигурации</h3><p>Независимые настройки для каждого устройства или сценария</p></div><button className="primary" onClick={async()=>{const p=await api(`/subscriptions/${sub.id}/profiles`,{method:'POST',body:JSON.stringify({name:`Новый профиль ${sub.profiles.length+1}`,modifications:{rules:[],overrides:{}}})});reload();setEdit(p)}}><CirclePlus/>Новый профиль</button></div><div className="cards">{sub.profiles.map(p=><article className="profile" key={p.id}><div className="profileTop"><span className="device"><Settings/></span><span className="activeTag"><i/> Активен</span></div><h3>{p.name}</h3><p>{(p.modifications.rules||[]).length} правил · {Object.keys(p.modifications.overrides||{}).length} переопределений</p><div className="link"><code>{p.url}</code><button onClick={()=>navigator.clipboard.writeText(p.url)}><Clipboard/></button></div><div className="profileBtns"><button onClick={()=>setEdit(p)}><FileCog/>Настроить</button><a href={p.url} target="_blank"><ExternalLink/></a></div></article>)}</div></>}</div>}
+function Welcome({
+  onDone,
+  theme,
+  flip,
+}: {
+  onDone: () => void;
+  theme: string;
+  flip: () => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  async function go(e: any) {
+    e.preventDefault();
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await fetch(API + "/auth/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw Error(d.detail);
+      localStorage.setItem("token", d.token);
+      localStorage.setItem("account_key", d.account_key);
+      onDone();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="welcome">
+      <button className="theme" onClick={flip}>
+        {theme === "dark" ? <Sun /> : <Moon />}
+      </button>
+      <div className="welcomeCard">
+        <div className="heroLogo">
+          <Route />
+        </div>
+        <div className="pill">
+          <i /> SELF-HOSTED CONTROL PLANE
+        </div>
+        <h1>
+          Ваша подписка.
+          <br />
+          <em>Ваши правила.</em>
+        </h1>
+        <p>
+          Подключите Clash/Mihomo-подписку и управляйте маршрутизацией,
+          профилями и конфигурацией в одном месте.
+        </p>
+        <form onSubmit={go}>
+          <label>Ссылка на подписку</label>
+          <div className="urlInput">
+            <Globe2 />
+            <input
+              required
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://provider.example/subscription"
+            />
+            <button disabled={busy}>
+              {busy ? <RefreshCw className="spin" /> : <ChevronRight />}
+            </button>
+          </div>
+          {err && <div className="error">{err}</div>}
+          <small>
+            <Shield /> Ссылка шифруется и используется только для обновления
+            конфигурации
+          </small>
+        </form>
+      </div>
+      <div className="welcomeFoot">
+        <span>
+          <FileCog /> Гибкие модификаторы
+        </span>
+        <span>
+          <Route /> Умный роутинг
+        </span>
+        <span>
+          <KeyRound /> Приватные ссылки
+        </span>
+      </div>
+    </div>
+  );
+}
 
-function Metric({icon,name,value,good=false}:any){return <div className="metric"><span>{icon}</span><div><b className={good?'good':''}>{value}</b><small>{name}</small></div></div>}
-function Yaml({text}:{text:string}){return <section className="panel yaml"><div className="yamlHead"><div><Code2/><h3>Исходная конфигурация</h3></div><button onClick={()=>navigator.clipboard.writeText(text)}><Clipboard/>Копировать</button></div><pre>{text}</pre></section>}
-function Empty(){return <div className="empty"><Server/><h2>Добавьте первую подписку</h2></div>}
+function Subscription({ sub, reload }: { sub: Sub; reload: () => void }) {
+  const [tab, setTab] = useState("overview");
+  const [full, setFull] = useState<Sub>();
+  const [edit, setEdit] = useState<Profile>();
+  useEffect(() => {
+    api(`/subscriptions/${sub.id}`).then(setFull);
+  }, [sub.id]);
+  const data = full || sub;
+  if (edit)
+    return (
+      <Editor
+        profile={edit}
+        proxies={data.source_meta.proxy_names || []}
+        back={() => setEdit(undefined)}
+        saved={() => {
+          setEdit(undefined);
+          reload();
+          api(`/subscriptions/${sub.id}`).then(setFull);
+        }}
+      />
+    );
+  return (
+    <div className="page">
+      <div className="tabs">
+        <button
+          className={tab === "overview" ? "on" : ""}
+          onClick={() => setTab("overview")}
+        >
+          Обзор
+        </button>
+        <button
+          className={tab === "yaml" ? "on" : ""}
+          onClick={() => setTab("yaml")}
+        >
+          Исходный YAML
+        </button>
+      </div>
+      {tab === "yaml" ? (
+        <Yaml text={data.yaml || ""} />
+      ) : (
+        <>
+          <section className="metrics">
+            <Metric
+              icon={<Server />}
+              name="Прокси-серверов"
+              value={data.source_meta.proxy_count}
+            />
+            <Metric
+              icon={<Route />}
+              name="Групп маршрутизации"
+              value={data.source_meta.group_count}
+            />
+            <Metric
+              icon={<FileCog />}
+              name="Правил"
+              value={data.source_meta.rule_count}
+            />
+            <Metric icon={<Activity />} name="Статус" value="Активна" good />
+          </section>
+          <section className="panel source">
+            <div>
+              <span className="panelIcon">
+                <Database />
+              </span>
+              <div>
+                <h3>Исходная подписка</h3>
+                <p>{data.source_url}</p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                await api(`/subscriptions/${sub.id}/refresh`, {
+                  method: "POST",
+                });
+                reload();
+              }}
+            >
+              <RefreshCw />
+              Обновить
+            </button>
+          </section>
+          <div className="sectionTitle">
+            <div>
+              <h3>Профили конфигурации</h3>
+              <p>Независимые настройки для каждого устройства или сценария</p>
+            </div>
+            <button
+              className="primary"
+              onClick={async () => {
+                const p = await api(`/subscriptions/${sub.id}/profiles`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    name: `Новый профиль ${sub.profiles.length + 1}`,
+                    modifications: { rules: [], overrides: {} },
+                  }),
+                });
+                reload();
+                setEdit(p);
+              }}
+            >
+              <CirclePlus />
+              Новый профиль
+            </button>
+          </div>
+          <div className="cards">
+            {sub.profiles.map((p) => (
+              <article className="profile" key={p.id}>
+                <div className="profileTop">
+                  <span className="device">
+                    <Settings />
+                  </span>
+                  <span className="activeTag">
+                    <i /> Активен
+                  </span>
+                </div>
+                <h3>{p.name}</h3>
+                <p>
+                  {(p.modifications.rules || []).length} правил ·{" "}
+                  {Object.keys(p.modifications.overrides || {}).length}{" "}
+                  переопределений
+                </p>
+                <div className="link">
+                  <code>{p.url}</code>
+                  <button onClick={() => navigator.clipboard.writeText(p.url)}>
+                    <Clipboard />
+                  </button>
+                </div>
+                <div className="profileBtns">
+                  <button onClick={() => setEdit(p)}>
+                    <FileCog />
+                    Настроить
+                  </button>
+                  <a href={p.url} target="_blank">
+                    <ExternalLink />
+                  </a>
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
-function Editor({profile,proxies,back,saved}:{profile:Profile,proxies:string[],back:()=>void,saved:()=>void}){const [name,setName]=useState(profile.name);const [rules,setRules]=useState<string[]>((profile.modifications.rules||[]));const [overrides,setOverrides]=useState(JSON.stringify(profile.modifications.overrides||{},null,2));const [geo,setGeo]=useState(profile.modifications.geo?.mode||false);const [err,setErr]=useState('');const suggestions=useMemo(()=>proxies.slice(0,60),[proxies]);async function save(){try{const parsed=JSON.parse(overrides);await api(`/profiles/${profile.id}`,{method:'PATCH',body:JSON.stringify({name,modifications:{...profile.modifications,rules,overrides:parsed,geo:{mode:geo,'geo-auto-update':geo}}})});saved()}catch(e:any){setErr(e.message)}}return <div className="page editor"><button className="back" onClick={back}>← Назад к подписке</button><div className="sectionTitle"><div><h2>Настройка профиля</h2><p>Изменения применяются при каждом запросе публичной ссылки</p></div><button className="primary" onClick={save}><Save/>Сохранить</button></div><div className="editGrid"><section className="panel form"><h3>Основное</h3><label>Название профиля<input value={name} onChange={e=>setName(e.target.value)}/></label><label className="toggle"><span><b>GeoData mode</b><small>Использовать geosite.dat и geoip.dat</small></span><input type="checkbox" checked={geo} onChange={e=>setGeo(e.target.checked)}/></label><h3>Правила маршрутизации</h3><p className="hint">Формат Mihomo, например: DOMAIN-SUFFIX,google.com,Имя прокси</p>{rules.map((r,i)=><div className="rule" key={i}><input value={r} list="proxy-list" onChange={e=>setRules(rules.map((x,j)=>j===i?e.target.value:x))}/><button onClick={()=>setRules(rules.filter((_,j)=>j!==i))}><Trash2/></button></div>)}<datalist id="proxy-list">{suggestions.map(x=><option value={`DOMAIN-SUFFIX,example.com,${x}`} key={x}/>)}</datalist><button onClick={()=>setRules([...rules,'DOMAIN-SUFFIX,example.com,DIRECT'])}><CirclePlus/>Добавить правило</button></section><section className="panel form"><h3>Переопределения YAML</h3><p className="hint">JSON-объект объединяется с исходной конфигурацией. Значение null удаляет ключ.</p><textarea value={overrides} onChange={e=>setOverrides(e.target.value)} spellCheck={false}/>{err&&<div className="error">{err}</div>}<div className="callout"><Shield/><div><b>Безопасное применение</b><p>Исходная подписка не изменяется. Ошибки можно отменить, очистив переопределения.</p></div></div></section></div></div>}
+function Metric({ icon, name, value, good = false }: any) {
+  return (
+    <div className="metric">
+      <span>{icon}</span>
+      <div>
+        <b className={good ? "good" : ""}>{value}</b>
+        <small>{name}</small>
+      </div>
+    </div>
+  );
+}
+function Yaml({ text }: { text: string }) {
+  return (
+    <section className="panel yaml">
+      <div className="yamlHead">
+        <div>
+          <Code2 />
+          <h3>Исходная конфигурация</h3>
+        </div>
+        <button onClick={() => navigator.clipboard.writeText(text)}>
+          <Clipboard />
+          Копировать
+        </button>
+      </div>
+      <pre>{text}</pre>
+    </section>
+  );
+}
+function Empty() {
+  return (
+    <div className="empty">
+      <Server />
+      <h2>Добавьте первую подписку</h2>
+    </div>
+  );
+}
 
-function Admin(){const [pass,setPass]=useState(sessionStorage.getItem('admin')||'');const [data,setData]=useState<any>();const [defaults,setDefaults]=useState('{}');async function load(){try{const x=await api('/admin/overview',{headers:{'X-Admin-Password':pass}});sessionStorage.setItem('admin',pass);setData(x);setDefaults(JSON.stringify(x.defaults,null,2))}catch(e:any){alert(e.message)}}if(!data)return <div className="adminLogin panel"><Shield/><h2>Администрирование</h2><p>Введите пароль из переменной ADMIN_PASSWORD.</p><input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Пароль администратора"/><button className="primary" onClick={load}>Войти</button></div>;return <div className="page"><section className="metrics"><Metric icon={<Database/>} name="Аккаунтов" value={data.accounts}/><Metric icon={<Server/>} name="Подписок" value={data.subscriptions.length}/><Metric icon={<FileCog/>} name="Профилей" value={data.profiles}/></section><div className="editGrid"><section className="panel form"><h3>Все подписки</h3>{data.subscriptions.map((s:Sub)=><div className="adminRow" key={s.id}><div><b>{s.name}</b><small>{s.source_url}</small></div><span>{s.source_meta.proxy_count} узлов</span></div>)}</section><section className="panel form"><h3>Модификаторы по умолчанию</h3><p className="hint">Применяются к первому профилю новых подписок.</p><textarea value={defaults} onChange={e=>setDefaults(e.target.value)}/><button className="primary" onClick={async()=>{await api('/admin/defaults',{method:'PUT',headers:{'X-Admin-Password':pass},body:defaults});alert('Сохранено')}}><Save/>Сохранить</button></section></div></div>}
-createRoot(document.getElementById('root')!).render(<App/>);
+function Editor({
+  profile,
+  proxies,
+  back,
+  saved,
+}: {
+  profile: Profile;
+  proxies: string[];
+  back: () => void;
+  saved: () => void;
+}) {
+  const [name, setName] = useState(profile.name);
+  const [rules, setRules] = useState<string[]>(
+    profile.modifications.rules || [],
+  );
+  const [overrides, setOverrides] = useState(
+    JSON.stringify(profile.modifications.overrides || {}, null, 2),
+  );
+  const currentGeo = profile.modifications.geo || {};
+  const [geo, setGeo] = useState(currentGeo.mode ?? true);
+  const [geoAuto, setGeoAuto] = useState(currentGeo["geo-auto-update"] ?? true);
+  const [geoInterval, setGeoInterval] = useState(
+    currentGeo["geo-update-interval"] ?? 24,
+  );
+  const [geoLoader, setGeoLoader] = useState(
+    currentGeo["geodata-loader"] || "memconservative",
+  );
+  const defaultGeoUrls = {
+    geoip:
+      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat",
+    geosite:
+      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat",
+    mmdb: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb",
+    asn: "https://github.com/xishang0128/geoip/releases/download/latest/GeoLite2-ASN.mmdb",
+  };
+  const [geoUrls, setGeoUrls] = useState({
+    ...defaultGeoUrls,
+    ...(currentGeo["geox-url"] || {}),
+  });
+  const [err, setErr] = useState("");
+  const suggestions = useMemo(() => proxies.slice(0, 60), [proxies]);
+  async function save() {
+    try {
+      const parsed = JSON.parse(overrides);
+      await api(`/profiles/${profile.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name,
+          modifications: {
+            ...profile.modifications,
+            rules,
+            overrides: parsed,
+            geo: {
+              mode: geo,
+              "geodata-loader": geoLoader,
+              "geo-auto-update": geoAuto,
+              "geo-update-interval": Number(geoInterval),
+              "geox-url": geoUrls,
+            },
+          },
+        }),
+      });
+      saved();
+    } catch (e: any) {
+      setErr(e.message);
+    }
+  }
+  return (
+    <div className="page editor">
+      <button className="back" onClick={back}>
+        ← Назад к подписке
+      </button>
+      <div className="sectionTitle">
+        <div>
+          <h2>Настройка профиля</h2>
+          <p>Изменения применяются при каждом запросе публичной ссылки</p>
+        </div>
+        <button className="primary" onClick={save}>
+          <Save />
+          Сохранить
+        </button>
+      </div>
+      <div className="editGrid">
+        <section className="panel form externalResources">
+          <div className="externalTitle">
+            <div>
+              <h3>Внешние Geo-ресурсы</h3>
+              <p className="hint">
+                Эти ссылки попадут в geox-url итоговой конфигурации Mihomo.
+              </p>
+            </div>
+            <Globe2 />
+          </div>
+          <div className="resourceRows">
+            {(
+              [
+                ["geoip", "GeoIP Database"],
+                ["geosite", "GeoSite Database"],
+                ["mmdb", "MMDB Database"],
+                ["asn", "ASN Database"],
+              ] as const
+            ).map(([key, label]) => (
+              <label className="resourceRow" key={key}>
+                <span>{label}</span>
+                <input
+                  type="url"
+                  value={geoUrls[key]}
+                  onChange={(e) =>
+                    setGeoUrls({ ...geoUrls, [key]: e.target.value })
+                  }
+                />
+              </label>
+            ))}
+          </div>
+          <div className="geoOptions">
+            <label>
+              <span>GeoIP Data Mode</span>
+              <select
+                value={geo ? "dat" : "mmdb"}
+                onChange={(e) => setGeo(e.target.value === "dat")}
+              >
+                <option value="dat">DAT</option>
+                <option value="mmdb">MMDB</option>
+              </select>
+            </label>
+            <label>
+              <span>Загрузчик</span>
+              <select
+                value={geoLoader}
+                onChange={(e) => setGeoLoader(e.target.value)}
+              >
+                <option value="memconservative">Экономия памяти</option>
+                <option value="standard">Стандартный</option>
+              </select>
+            </label>
+            <label>
+              <span>Интервал обновления, часов</span>
+              <input
+                type="number"
+                min="1"
+                max="720"
+                value={geoInterval}
+                onChange={(e) => setGeoInterval(Number(e.target.value))}
+              />
+            </label>
+            <label className="toggle compactToggle">
+              <span>Автообновление</span>
+              <input
+                type="checkbox"
+                checked={geoAuto}
+                onChange={(e) => setGeoAuto(e.target.checked)}
+              />
+            </label>
+          </div>
+        </section>
+        <section className="panel form">
+          <h3>Основное</h3>
+          <label>
+            Название профиля
+            <input value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <h3>Правила маршрутизации</h3>
+          <p className="hint">
+            Формат Mihomo, например: DOMAIN-SUFFIX,google.com,Имя прокси
+          </p>
+          {rules.map((r, i) => (
+            <div className="rule" key={i}>
+              <input
+                value={r}
+                list="proxy-list"
+                onChange={(e) =>
+                  setRules(rules.map((x, j) => (j === i ? e.target.value : x)))
+                }
+              />
+              <button onClick={() => setRules(rules.filter((_, j) => j !== i))}>
+                <Trash2 />
+              </button>
+            </div>
+          ))}
+          <datalist id="proxy-list">
+            {suggestions.map((x) => (
+              <option value={`DOMAIN-SUFFIX,example.com,${x}`} key={x} />
+            ))}
+          </datalist>
+          <button
+            onClick={() =>
+              setRules([...rules, "DOMAIN-SUFFIX,example.com,DIRECT"])
+            }
+          >
+            <CirclePlus />
+            Добавить правило
+          </button>
+        </section>
+        <section className="panel form">
+          <h3>Переопределения YAML</h3>
+          <p className="hint">
+            JSON-объект объединяется с исходной конфигурацией. Значение null
+            удаляет ключ.
+          </p>
+          <textarea
+            value={overrides}
+            onChange={(e) => setOverrides(e.target.value)}
+            spellCheck={false}
+          />
+          {err && <div className="error">{err}</div>}
+          <div className="callout">
+            <Shield />
+            <div>
+              <b>Безопасное применение</b>
+              <p>
+                Исходная подписка не изменяется. Ошибки можно отменить, очистив
+                переопределения.
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Admin() {
+  const [pass, setPass] = useState(sessionStorage.getItem("admin") || "");
+  const [data, setData] = useState<any>();
+  const [defaults, setDefaults] = useState("{}");
+  async function load() {
+    try {
+      const x = await api("/admin/overview", {
+        headers: { "X-Admin-Password": pass },
+      });
+      sessionStorage.setItem("admin", pass);
+      setData(x);
+      setDefaults(JSON.stringify(x.defaults, null, 2));
+    } catch (e: any) {
+      alert(e.message);
+    }
+  }
+  if (!data)
+    return (
+      <div className="adminLogin panel">
+        <Shield />
+        <h2>Администрирование</h2>
+        <p>Введите пароль из переменной ADMIN_PASSWORD.</p>
+        <input
+          type="password"
+          value={pass}
+          onChange={(e) => setPass(e.target.value)}
+          placeholder="Пароль администратора"
+        />
+        <button className="primary" onClick={load}>
+          Войти
+        </button>
+      </div>
+    );
+  return (
+    <div className="page">
+      <section className="metrics">
+        <Metric icon={<Database />} name="Аккаунтов" value={data.accounts} />
+        <Metric
+          icon={<Server />}
+          name="Подписок"
+          value={data.subscriptions.length}
+        />
+        <Metric icon={<FileCog />} name="Профилей" value={data.profiles} />
+      </section>
+      <div className="editGrid">
+        <section className="panel form">
+          <h3>Все подписки</h3>
+          {data.subscriptions.map((s: Sub) => (
+            <div className="adminRow" key={s.id}>
+              <div>
+                <b>{s.name}</b>
+                <small>{s.source_url}</small>
+              </div>
+              <span>{s.source_meta.proxy_count} узлов</span>
+            </div>
+          ))}
+        </section>
+        <section className="panel form">
+          <h3>Модификаторы по умолчанию</h3>
+          <p className="hint">Применяются к первому профилю новых подписок.</p>
+          <textarea
+            value={defaults}
+            onChange={(e) => setDefaults(e.target.value)}
+          />
+          <button
+            className="primary"
+            onClick={async () => {
+              await api("/admin/defaults", {
+                method: "PUT",
+                headers: { "X-Admin-Password": pass },
+                body: defaults,
+              });
+              alert("Сохранено");
+            }}
+          >
+            <Save />
+            Сохранить
+          </button>
+        </section>
+      </div>
+    </div>
+  );
+}
+createRoot(document.getElementById("root")!).render(<App />);

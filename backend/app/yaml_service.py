@@ -58,7 +58,7 @@ def apply_modifications(source: str, mods: dict) -> str:
     deep_merge(config, mods.get("overrides", {}))
     if mods.get("geo"):
         config["geodata-mode"] = mods["geo"].get("mode", True)
-        for key in ("geo-auto-update", "geo-update-interval", "geox-url"):
+        for key in ("geodata-loader", "geo-auto-update", "geo-update-interval", "geox-url"):
             if key in mods["geo"]:
                 config[key] = mods["geo"][key]
     custom_rules = [r.strip() for r in mods.get("rules", []) if isinstance(r, str) and r.strip()]
