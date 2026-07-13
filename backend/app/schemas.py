@@ -21,7 +21,12 @@ class ProfileUpdate(BaseModel):
     enabled: bool | None = None
 
 
+class DefaultProfileTemplate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    modifications: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
 class SubscriptionUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=160)
     enabled: bool | None = None
-

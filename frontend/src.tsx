@@ -66,6 +66,35 @@ type Sub = {
   profiles: Profile[];
   yaml?: string;
 };
+type DefaultProfile = {
+  name: string;
+  modifications: any;
+  enabled: boolean;
+};
+function catalogFromYaml(text = "") {
+  try {
+    const parsed = parseYaml(text) || {};
+    return {
+      proxies: Array.isArray(parsed.proxies)
+        ? parsed.proxies
+            .filter((item: any) => item && typeof item.name === "string")
+            .map((item: any) => item.name)
+        : [],
+      groups: Array.isArray(parsed["proxy-groups"])
+        ? parsed["proxy-groups"]
+            .filter((item: any) => item && typeof item.name === "string")
+            .map((item: any) => item.name)
+        : [],
+      ruleProviders:
+        parsed["rule-providers"] &&
+        typeof parsed["rule-providers"] === "object"
+          ? Object.keys(parsed["rule-providers"])
+          : [],
+    };
+  } catch {
+    return { proxies: [], groups: [], ruleProviders: [] };
+  }
+}
 const token = () => localStorage.getItem("token");
 let activeRequests = 0;
 function emitLoading() {
@@ -531,30 +560,10 @@ function Subscription({ sub, reload }: { sub: Sub; reload: () => void }) {
     setRenaming(false);
   }, [sub.id]);
   const data = full || sub;
-  const sourceCatalog = useMemo(() => {
-    try {
-      const parsed = parseYaml(data.yaml || "") || {};
-      return {
-        proxies: Array.isArray(parsed.proxies)
-          ? parsed.proxies
-              .filter((item: any) => item && typeof item.name === "string")
-              .map((item: any) => item.name)
-          : [],
-        groups: Array.isArray(parsed["proxy-groups"])
-          ? parsed["proxy-groups"]
-              .filter((item: any) => item && typeof item.name === "string")
-              .map((item: any) => item.name)
-          : [],
-        ruleProviders:
-          parsed["rule-providers"] &&
-          typeof parsed["rule-providers"] === "object"
-            ? Object.keys(parsed["rule-providers"])
-            : [],
-      };
-    } catch {
-      return { proxies: [], groups: [], ruleProviders: [] };
-    }
-  }, [data.yaml]);
+  const sourceCatalog = useMemo(
+    () => catalogFromYaml(data.yaml || ""),
+    [data.yaml],
+  );
   if (edit)
     return (
       <Editor
@@ -913,6 +922,8 @@ function Editor({
   sourceYaml,
   back,
   saved,
+  saveProfile,
+  templateMode = false,
 }: {
   profile: Profile;
   proxies: string[];
@@ -921,6 +932,8 @@ function Editor({
   sourceYaml: string;
   back: () => void;
   saved: () => void;
+  saveProfile?: (profile: { name: string; modifications: any }) => Promise<void>;
+  templateMode?: boolean;
 }) {
   const [name, setName] = useState(profile.name);
   const [rules, setRules] = useState<string[]>(
@@ -1111,24 +1124,27 @@ function Editor({
       if (typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("Переопределения должны быть YAML-объектом");
       }
-      await api(`/profiles/${profile.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          name,
-          modifications: {
-            ...profile.modifications,
-            rules,
-            overrides: parsed,
-            geo: {
-              mode: geo,
-              "geodata-loader": geoLoader,
-              "geo-auto-update": geoAuto,
-              "geo-update-interval": Number(geoInterval),
-              "geox-url": geoUrls,
-            },
+      const updated = {
+        name,
+        modifications: {
+          ...profile.modifications,
+          rules,
+          overrides: parsed,
+          geo: {
+            mode: geo,
+            "geodata-loader": geoLoader,
+            "geo-auto-update": geoAuto,
+            "geo-update-interval": Number(geoInterval),
+            "geox-url": geoUrls,
           },
-        }),
-      });
+        },
+      };
+      if (saveProfile) await saveProfile(updated);
+      else
+        await api(`/profiles/${profile.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(updated),
+        });
       saved();
     } catch (e: any) {
       setErr(e.message);
@@ -1137,12 +1153,16 @@ function Editor({
   return (
     <div className="page editor">
       <button className="back" onClick={back}>
-        ← Назад к подписке
+        ← {templateMode ? "Назад к шаблонам" : "Назад к подписке"}
       </button>
       <div className="sectionTitle">
         <div>
-          <h2>Настройка профиля</h2>
-          <p>Изменения применяются при каждом запросе публичной ссылки</p>
+          <h2>{templateMode ? "Настройка шаблона профиля" : "Настройка профиля"}</h2>
+          <p>
+            {templateMode
+              ? "Этот профиль будет автоматически создан в каждой новой подписке"
+              : "Изменения применяются при каждом запросе публичной ссылки"}
+          </p>
         </div>
         <button className="primary" onClick={save}>
           <Save />
@@ -1474,7 +1494,10 @@ function Editor({
 function Admin() {
   const [pass, setPass] = useState(sessionStorage.getItem("admin") || "");
   const [data, setData] = useState<any>();
-  const [defaults, setDefaults] = useState("{}");
+  const [defaultProfiles, setDefaultProfiles] = useState<DefaultProfile[]>([]);
+  const [selectedSourceId, setSelectedSourceId] = useState<number>(0);
+  const [editTemplate, setEditTemplate] = useState<number>();
+  const [message, setMessage] = useState("");
   async function load() {
     try {
       const x = await api("/admin/overview", {
@@ -1482,10 +1505,57 @@ function Admin() {
       });
       sessionStorage.setItem("admin", pass);
       setData(x);
-      setDefaults(JSON.stringify(x.defaults, null, 2));
+      setDefaultProfiles(x.default_profiles || []);
+      setSelectedSourceId(x.subscriptions[0]?.id || 0);
     } catch (e: any) {
       alert(e.message);
     }
+  }
+  async function saveTemplates(next: DefaultProfile[]) {
+    const saved = await api("/admin/default-profiles", {
+      method: "PUT",
+      headers: { "X-Admin-Password": pass },
+      body: JSON.stringify(next),
+    });
+    setDefaultProfiles(saved);
+    setMessage("Шаблоны профилей сохранены");
+    return saved;
+  }
+  const templateSource: Sub | undefined = data?.subscriptions.find(
+    (subscription: Sub) => subscription.id === selectedSourceId,
+  );
+  const templateCatalog = useMemo(
+    () => catalogFromYaml(templateSource?.yaml || ""),
+    [templateSource?.yaml],
+  );
+  if (data && editTemplate !== undefined) {
+    const template = defaultProfiles[editTemplate];
+    if (template)
+      return (
+        <Editor
+          profile={{
+            id: -(editTemplate + 1),
+            name: template.name,
+            modifications: template.modifications,
+            enabled: template.enabled,
+            slug: "",
+            url: "",
+          }}
+          proxies={templateCatalog.proxies}
+          groups={templateCatalog.groups}
+          ruleProviders={templateCatalog.ruleProviders}
+          sourceYaml={templateSource?.yaml || ""}
+          templateMode
+          back={() => setEditTemplate(undefined)}
+          saveProfile={async (updated) => {
+            const next = defaultProfiles.map((item, index) =>
+              index === editTemplate ? { ...item, ...updated } : item,
+            );
+            await saveTemplates(next);
+          }}
+          saved={() => setEditTemplate(undefined)}
+        />
+      );
   }
   if (!data)
     return (
@@ -1524,31 +1594,95 @@ function Admin() {
                 <b>{s.name}</b>
                 <small>{s.source_url}</small>
               </div>
-              <span>{s.source_meta.proxy_count} узлов</span>
+              <div className="adminSubscriptionActions">
+                <span>{s.source_meta.proxy_count} узлов</span>
+                <button
+                  onClick={async () => {
+                    const templates = s.profiles.map((profile) => ({
+                      name: profile.name,
+                      modifications: structuredClone(profile.modifications),
+                      enabled: profile.enabled,
+                    }));
+                    await saveTemplates(templates);
+                    setSelectedSourceId(s.id);
+                    setMessage(`Профили «${s.name}» назначены шаблонами`);
+                  }}
+                >
+                  <Clipboard /> Взять профили как шаблон
+                </button>
+              </div>
             </div>
           ))}
         </section>
-        <section className="panel form">
-          <h3>Модификаторы по умолчанию</h3>
-          <p className="hint">Применяются к первому профилю новых подписок.</p>
-          <textarea
-            value={defaults}
-            onChange={(e) => setDefaults(e.target.value)}
-          />
-          <button
-            className="primary"
-            onClick={async () => {
-              await api("/admin/defaults", {
-                method: "PUT",
-                headers: { "X-Admin-Password": pass },
-                body: defaults,
-              });
-              alert("Сохранено");
-            }}
-          >
-            <Save />
-            Сохранить
-          </button>
+        <section className="panel form defaultProfilesPanel">
+          <div className="defaultProfilesHead">
+            <div>
+              <h3>Профили новых подписок</h3>
+              <p className="hint">
+                Создаются автоматически вместе с каждой новой подпиской.
+              </p>
+            </div>
+            <button
+              className="primary"
+              onClick={async () => {
+                const next = [
+                  ...defaultProfiles,
+                  {
+                    name: "Новый профиль",
+                    modifications: { rules: [], overrides: {} },
+                    enabled: true,
+                  },
+                ];
+                await saveTemplates(next);
+                setEditTemplate(next.length - 1);
+              }}
+            >
+              <CirclePlus /> Добавить профиль
+            </button>
+          </div>
+          <label className="templateSourceSelect">
+            <span>Исходная подписка для подсказок в редакторе</span>
+            <SelectField
+              value={String(selectedSourceId)}
+              onChange={(value) => setSelectedSourceId(Number(value))}
+              options={data.subscriptions.map((subscription: Sub) => ({
+                value: String(subscription.id),
+                label: subscription.name,
+              }))}
+            />
+          </label>
+          <div className="defaultProfileList">
+            {defaultProfiles.map((profile, index) => (
+              <article className="defaultProfileCard" key={`${profile.name}-${index}`}>
+                <div>
+                  <FileCog />
+                  <span>
+                    <b>{profile.name}</b>
+                    <small>
+                      {(profile.modifications.rules || []).length} правил · {Object.keys(profile.modifications.overrides || {}).length} переопределений
+                    </small>
+                  </span>
+                </div>
+                <div>
+                  <button onClick={() => setEditTemplate(index)}>
+                    <Settings /> Настроить
+                  </button>
+                  <button
+                    className="dangerButton"
+                    disabled={defaultProfiles.length === 1}
+                    onClick={() =>
+                      saveTemplates(
+                        defaultProfiles.filter((_, itemIndex) => itemIndex !== index),
+                      )
+                    }
+                  >
+                    <Trash2 />
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+          {message && <div className="callout"><Check /><b>{message}</b></div>}
         </section>
       </div>
     </div>

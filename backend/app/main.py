@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import base64
+from copy import deepcopy
 import secrets
 import re
 import yaml
@@ -11,7 +12,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .database import Base, engine, get_db
 from .models import Account, Profile, Setting, Subscription
-from .schemas import ImportRequest, LoginRequest, ProfileIn, ProfileUpdate, SubscriptionUpdate
+from .schemas import DefaultProfileTemplate, ImportRequest, LoginRequest, ProfileIn, ProfileUpdate, SubscriptionUpdate
 from .security import current_account_id, make_session, require_admin
 from .yaml_service import apply_modifications, fetch_yaml, subscription_meta
 
@@ -50,6 +51,25 @@ def serialize_subscription(s: Subscription, include_yaml=False):
     return result
 
 
+def default_profile_templates(setting: Setting) -> list[dict]:
+    """Read the new multi-profile format while preserving old installations."""
+    stored = setting.default_modifications or {}
+    templates = stored.get("profile_templates") if isinstance(stored, dict) else None
+    if isinstance(templates, list) and templates:
+        return deepcopy(templates)
+    return [{"name": "Основной профиль", "modifications": deepcopy(stored), "enabled": True}]
+
+
+def add_default_profiles(db: Session, subscription_id: int):
+    for template in default_profile_templates(db.get(Setting, 1)):
+        db.add(Profile(
+            subscription_id=subscription_id,
+            name=template.get("name") or "Основной профиль",
+            modifications=deepcopy(template.get("modifications") or {}),
+            enabled=template.get("enabled", True),
+        ))
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
@@ -66,12 +86,11 @@ async def initial_import(body: ImportRequest, db: Session = Depends(get_db)):
     account = Account()
     db.add(account)
     db.flush()
-    defaults = db.get(Setting, 1).default_modifications
     sub = Subscription(account_id=account.id, source_url=url, name=meta.get("provider_name") or name_from_url(url),
                        cached_yaml=raw, source_meta=meta)
     db.add(sub)
     db.flush()
-    db.add(Profile(subscription_id=sub.id, name="Основной профиль", modifications=defaults))
+    add_default_profiles(db, sub.id)
     db.commit()
     return {"token": make_session(account.id), "account_key": account.access_token}
 
@@ -108,7 +127,7 @@ async def add_subscription(body: ImportRequest, account_id: int = Depends(curren
     sub = Subscription(account_id=account_id, source_url=url, name=meta.get("provider_name") or name_from_url(url),
                        cached_yaml=raw, source_meta=meta)
     db.add(sub); db.flush()
-    db.add(Profile(subscription_id=sub.id, name="Основной профиль", modifications=db.get(Setting, 1).default_modifications))
+    add_default_profiles(db, sub.id)
     db.commit()
     return serialize_subscription(sub, True)
 
@@ -219,11 +238,24 @@ async def public_subscription(slug: str, db: Session = Depends(get_db)):
 @app.get("/api/admin/overview", dependencies=[Depends(require_admin)])
 def admin_overview(db: Session = Depends(get_db)):
     rows = db.scalars(select(Subscription).order_by(Subscription.created_at.desc())).all()
-    return {"subscriptions": [serialize_subscription(s) for s in rows], "accounts": db.scalar(select(func.count(Account.id))),
-            "profiles": db.scalar(select(func.count(Profile.id))), "defaults": db.get(Setting, 1).default_modifications}
+    setting = db.get(Setting, 1)
+    return {"subscriptions": [serialize_subscription(s, True) for s in rows], "accounts": db.scalar(select(func.count(Account.id))),
+            "profiles": db.scalar(select(func.count(Profile.id))), "defaults": setting.default_modifications,
+            "default_profiles": default_profile_templates(setting)}
 
 
 @app.put("/api/admin/defaults", dependencies=[Depends(require_admin)])
 def admin_defaults(modifications: dict, db: Session = Depends(get_db)):
     setting = db.get(Setting, 1); setting.default_modifications = modifications; db.commit()
     return setting.default_modifications
+
+
+@app.put("/api/admin/default-profiles", dependencies=[Depends(require_admin)])
+def admin_default_profiles(templates: list[DefaultProfileTemplate], db: Session = Depends(get_db)):
+    if not templates:
+        raise HTTPException(422, "Должен остаться хотя бы один профиль по умолчанию")
+    setting = db.get(Setting, 1)
+    saved = [template.model_dump() for template in templates]
+    setting.default_modifications = {"profile_templates": saved}
+    db.commit()
+    return saved
