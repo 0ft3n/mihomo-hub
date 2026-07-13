@@ -31,6 +31,24 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import "./style.css";
 
 const API = "/api";
+const RULE_TYPES = [
+  "DOMAIN",
+  "DOMAIN-SUFFIX",
+  "DOMAIN-KEYWORD",
+  "DOMAIN-REGEX",
+  "GEOSITE",
+  "GEOIP",
+  "IP-ASN",
+  "IP-CIDR",
+  "IP-CIDR6",
+  "SRC-IP-CIDR",
+  "DST-PORT",
+  "SRC-PORT",
+  "PROCESS-NAME",
+  "PROCESS-PATH",
+  "RULE-SET",
+  "MATCH",
+];
 type Profile = {
   id: number;
   name: string;
@@ -327,6 +345,72 @@ function SelectField({
   );
 }
 
+function Combobox({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const filtered = options
+    .filter((option) => option.toLowerCase().includes(value.toLowerCase()))
+    .slice(0, 80);
+  return (
+    <div className={open ? "comboBox open" : "comboBox"}>
+      {open && (
+        <button
+          type="button"
+          className="selectDismiss"
+          onClick={() => setOpen(false)}
+        />
+      )}
+      <div className="comboInput">
+        <input
+          value={value}
+          placeholder={placeholder}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setOpen(true);
+          }}
+        />
+        <button type="button" onClick={() => setOpen(!open)}>
+          <ChevronDown />
+        </button>
+      </div>
+      {open && (
+        <div className="selectMenu comboMenu">
+          {filtered.length ? (
+            filtered.map((option) => (
+              <button
+                type="button"
+                className={option === value ? "selected" : ""}
+                key={option}
+                onClick={() => {
+                  onChange(option);
+                  setOpen(false);
+                }}
+              >
+                <span>{option}</span>
+                {option === value && <Check />}
+              </button>
+            ))
+          ) : (
+            <div className="comboEmpty">
+              Можно использовать введённое значение
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Welcome({
   onDone,
   theme,
@@ -435,6 +519,8 @@ function Subscription({ sub, reload }: { sub: Sub; reload: () => void }) {
       <Editor
         profile={edit}
         proxies={data.source_meta.proxy_names || []}
+        groups={data.source_meta.group_names || []}
+        ruleProviders={data.source_meta.rule_provider_names || []}
         sourceYaml={data.yaml || ""}
         back={() => setEdit(undefined)}
         saved={() => {
@@ -766,12 +852,16 @@ function Empty() {
 function Editor({
   profile,
   proxies,
+  groups,
+  ruleProviders,
   sourceYaml,
   back,
   saved,
 }: {
   profile: Profile;
   proxies: string[];
+  groups: string[];
+  ruleProviders: string[];
   sourceYaml: string;
   back: () => void;
   saved: () => void;
@@ -782,6 +872,12 @@ function Editor({
   );
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
+  const [ruleMode, setRuleMode] = useState<"builder" | "text">("builder");
+  const [ruleType, setRuleType] = useState("DOMAIN-SUFFIX");
+  const [ruleValue, setRuleValue] = useState("");
+  const [ruleTarget, setRuleTarget] = useState(groups[0] || "DIRECT");
+  const [ruleNoResolve, setRuleNoResolve] = useState(false);
+  const [ruleText, setRuleText] = useState("");
   const [overrides, setOverrides] = useState(
     stringifyYaml(profile.modifications.overrides || {}, { lineWidth: 120 }),
   );
@@ -835,7 +931,56 @@ function Editor({
     ...(currentGeo["geox-url"] || {}),
   });
   const [err, setErr] = useState("");
-  const suggestions = useMemo(() => proxies.slice(0, 60), [proxies]);
+  const targetSuggestions = useMemo(
+    () => [
+      ...new Set([
+        ...groups,
+        ...proxies,
+        "DIRECT",
+        "REJECT",
+        "REJECT-DROP",
+        "PASS",
+      ]),
+    ],
+    [groups, proxies],
+  );
+  const valueSuggestions = useMemo(() => {
+    if (ruleType === "RULE-SET") return ruleProviders;
+    if (ruleType === "GEOSITE")
+      return ["telegram", "cloudflare", "category-ads-all"];
+    if (ruleType === "GEOIP")
+      return ["RU", "US", "private", "telegram", "cloudflare"];
+    return [];
+  }, [ruleType, ruleProviders]);
+  const needsValue = ruleType !== "MATCH";
+  const supportsNoResolve = [
+    "GEOIP",
+    "IP-CIDR",
+    "IP-CIDR6",
+    "SRC-IP-CIDR",
+  ].includes(ruleType);
+  function addComposedRule() {
+    const candidate =
+      ruleMode === "text"
+        ? ruleText.trim().replace(/^[-*]\s+/, "")
+        : [
+            ruleType,
+            ...(needsValue ? [ruleValue.trim()] : []),
+            ruleTarget.trim(),
+            ...(supportsNoResolve && ruleNoResolve ? ["no-resolve"] : []),
+          ].join(",");
+    const builderIncomplete =
+      ruleMode === "builder" &&
+      ((needsValue && !ruleValue.trim()) || !ruleTarget.trim());
+    if (!candidate || !candidate.includes(",") || builderIncomplete) {
+      setErr("Заполните все поля правила");
+      return;
+    }
+    setRules(rules.includes(candidate) ? rules : [...rules, candidate]);
+    setRuleValue("");
+    setRuleText("");
+    setErr("");
+  }
   const parsedBulkRules = useMemo(() => {
     if (!bulkText.trim()) return [];
     try {
@@ -1021,6 +1166,111 @@ function Editor({
           <p className="hint">
             Формат Mihomo, например: DOMAIN-SUFFIX,google.com,Имя прокси
           </p>
+          <div className="ruleComposer">
+            <div className="composerTabs">
+              <button
+                className={ruleMode === "builder" ? "active" : ""}
+                onClick={() => setRuleMode("builder")}
+              >
+                <Settings /> Билдер
+              </button>
+              <button
+                className={ruleMode === "text" ? "active" : ""}
+                onClick={() => setRuleMode("text")}
+              >
+                <Code2 /> Строка
+              </button>
+            </div>
+            {ruleMode === "builder" ? (
+              <div className="builderFields">
+                <label>
+                  <span>Тип правила</span>
+                  <SelectField
+                    value={ruleType}
+                    onChange={(value) => {
+                      setRuleType(value);
+                      setRuleNoResolve(false);
+                    }}
+                    options={RULE_TYPES.map((type) => ({
+                      value: type,
+                      label: type,
+                    }))}
+                  />
+                </label>
+                {needsValue && (
+                  <label>
+                    <span>Значение</span>
+                    <Combobox
+                      value={ruleValue}
+                      onChange={setRuleValue}
+                      options={valueSuggestions}
+                      placeholder={
+                        ruleType.includes("CIDR")
+                          ? "1.1.1.1/32"
+                          : ruleType === "IP-ASN"
+                            ? "13335"
+                            : ruleType === "RULE-SET"
+                              ? "Имя rule-provider"
+                              : "example.com"
+                      }
+                    />
+                  </label>
+                )}
+                <label>
+                  <span>Прокси или группа</span>
+                  <Combobox
+                    value={ruleTarget}
+                    onChange={setRuleTarget}
+                    options={targetSuggestions}
+                    placeholder="Выберите политику"
+                  />
+                </label>
+                {supportsNoResolve && (
+                  <label className="noResolveField">
+                    <span>DNS</span>
+                    <button
+                      className={
+                        ruleNoResolve ? "optionToggle on" : "optionToggle"
+                      }
+                      onClick={() => setRuleNoResolve(!ruleNoResolve)}
+                    >
+                      <i /> no-resolve
+                    </button>
+                  </label>
+                )}
+              </div>
+            ) : (
+              <div className="textRuleField">
+                <Code2 />
+                <input
+                  value={ruleText}
+                  onChange={(e) => setRuleText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addComposedRule();
+                  }}
+                  placeholder="DOMAIN-SUFFIX,example.com,🚀 Main"
+                  autoFocus
+                />
+              </div>
+            )}
+            <div className="composerPreview">
+              <code>
+                {ruleMode === "text"
+                  ? ruleText || "Готовое правило появится здесь"
+                  : [
+                      ruleType,
+                      ...(needsValue ? [ruleValue || "…"] : []),
+                      ruleTarget || "…",
+                      ...(supportsNoResolve && ruleNoResolve
+                        ? ["no-resolve"]
+                        : []),
+                    ].join(",")}
+              </code>
+              <button className="primary" onClick={addComposedRule}>
+                <CirclePlus /> Добавить правило
+              </button>
+            </div>
+          </div>
           <div className="bulkRules">
             <button
               className={bulkOpen ? "bulkToggle active" : "bulkToggle"}
@@ -1066,7 +1316,6 @@ function Editor({
             <div className="rule" key={i}>
               <input
                 value={r}
-                list="proxy-list"
                 onChange={(e) =>
                   setRules(rules.map((x, j) => (j === i ? e.target.value : x)))
                 }
@@ -1076,19 +1325,6 @@ function Editor({
               </button>
             </div>
           ))}
-          <datalist id="proxy-list">
-            {suggestions.map((x) => (
-              <option value={`DOMAIN-SUFFIX,example.com,${x}`} key={x} />
-            ))}
-          </datalist>
-          <button
-            onClick={() =>
-              setRules([...rules, "DOMAIN-SUFFIX,example.com,DIRECT"])
-            }
-          >
-            <CirclePlus />
-            Добавить правило
-          </button>
         </section>
         <section className="panel form yamlOverride">
           <h3>Переопределения YAML</h3>

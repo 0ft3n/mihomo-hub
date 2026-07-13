@@ -88,11 +88,15 @@ def apply_modifications(source: str, mods: dict) -> str:
 
 def summarize(data: dict) -> dict:
     proxies = data.get("proxies", [])
+    groups = data.get("proxy-groups", [])
+    providers = data.get("rule-providers", {})
     return {
         "proxy_count": len(proxies),
-        "group_count": len(data.get("proxy-groups", [])),
+        "group_count": len(groups),
         "rule_count": len(data.get("rules", [])),
         "proxy_names": [p.get("name", "Без имени") for p in proxies if isinstance(p, dict)],
+        "group_names": [g.get("name", "Без имени") for g in groups if isinstance(g, dict)],
+        "rule_provider_names": list(providers) if isinstance(providers, dict) else [],
         "proxy_types": sorted({p.get("type", "unknown") for p in proxies if isinstance(p, dict)}),
     }
 

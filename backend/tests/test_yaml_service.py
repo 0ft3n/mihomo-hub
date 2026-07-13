@@ -1,7 +1,7 @@
 import yaml
 from app.yaml_service import apply_modifications, deep_merge, summarize, subscription_meta
 
-SOURCE = """proxies:\n  - name: NL\n    type: vless\nproxy-groups: []\nrules:\n  - MATCH,DIRECT\ndns:\n  enable: true\n"""
+SOURCE = """proxies:\n  - name: NL\n    type: vless\nproxy-groups:\n  - name: Main\n    type: select\n    proxies: [NL]\nrule-providers:\n  blocked:\n    type: http\nrules:\n  - MATCH,DIRECT\ndns:\n  enable: true\n"""
 
 def test_deep_merge_and_remove():
     result = deep_merge({"a": {"b": 1, "c": 2}}, {"a": {"b": 3, "c": None}})
@@ -13,7 +13,10 @@ def test_apply_modifications():
     assert out["dns"] == {"enable": True, "ipv6": False}
 
 def test_summary():
-    assert summarize(yaml.safe_load(SOURCE))["proxy_names"] == ["NL"]
+    summary = summarize(yaml.safe_load(SOURCE))
+    assert summary["proxy_names"] == ["NL"]
+    assert summary["group_names"] == ["Main"]
+    assert summary["rule_provider_names"] == ["blocked"]
 
 def test_subscription_meta():
     meta = subscription_meta(yaml.safe_load(SOURCE), {
