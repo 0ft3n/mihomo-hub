@@ -357,8 +357,9 @@ function Combobox({
   placeholder: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const filtered = options
-    .filter((option) => option.toLowerCase().includes(value.toLowerCase()))
+    .filter((option) => option.toLowerCase().includes(query.toLowerCase()))
     .slice(0, 80);
   return (
     <div className={open ? "comboBox open" : "comboBox"}>
@@ -373,13 +374,23 @@ function Combobox({
         <input
           value={value}
           placeholder={placeholder}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setQuery("");
+            setOpen(true);
+          }}
           onChange={(e) => {
             onChange(e.target.value);
+            setQuery(e.target.value);
             setOpen(true);
           }}
         />
-        <button type="button" onClick={() => setOpen(!open)}>
+        <button
+          type="button"
+          onClick={() => {
+            setQuery("");
+            setOpen(!open);
+          }}
+        >
           <ChevronDown />
         </button>
       </div>
@@ -393,6 +404,7 @@ function Combobox({
                 key={option}
                 onClick={() => {
                   onChange(option);
+                  setQuery("");
                   setOpen(false);
                 }}
               >
