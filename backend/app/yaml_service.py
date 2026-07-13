@@ -1,6 +1,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
+import base64
 import httpx
 import yaml
 from fastapi import HTTPException
@@ -13,6 +14,7 @@ FORWARDED_SUBSCRIPTION_HEADERS = (
     "subscription-userinfo",
     "profile-update-interval",
     "profile-web-page-url",
+    "profile-title",
 )
 
 
@@ -47,11 +49,11 @@ async def fetch_yaml(url: str) -> tuple[str, dict[str, Any], dict[str, str]]:
         raise HTTPException(422, "Источник вернул некорректный YAML") from exc
     if not isinstance(data, dict) or not isinstance(data.get("proxies"), list):
         raise HTTPException(422, "Это не конфигурация Clash/Mihomo: отсутствует proxies")
-    headers = {
-        key: response.headers[key]
-        for key in FORWARDED_SUBSCRIPTION_HEADERS
-        if key in response.headers
-    }
+    headers = {}
+    for key in FORWARDED_SUBSCRIPTION_HEADERS:
+        value = response.headers.get(key)
+        if value:
+            headers[key] = value
     return text, data, headers
 
 
@@ -101,6 +103,18 @@ def subscription_meta(data: dict, headers: dict[str, str], previous: dict | None
     if not forwarded and previous:
         forwarded = previous.get("response_headers", {})
     result["response_headers"] = forwarded
+    title = forwarded.get("profile-title", "").strip()
+    if title.lower().startswith("base64:"):
+        try:
+            title = base64.b64decode(title[7:] + "===").decode("utf-8").strip()
+        except (ValueError, UnicodeDecodeError):
+            title = ""
+    if title:
+        result["provider_name"] = title[:160]
+    elif previous and previous.get("provider_name"):
+        result["provider_name"] = previous["provider_name"]
+    if previous and previous.get("name_overridden"):
+        result["name_overridden"] = True
     raw = forwarded.get("subscription-userinfo", "")
     values: dict[str, int] = {}
     for part in raw.split(";"):

@@ -16,7 +16,11 @@ def test_summary():
     assert summarize(yaml.safe_load(SOURCE))["proxy_names"] == ["NL"]
 
 def test_subscription_meta():
-    meta = subscription_meta(yaml.safe_load(SOURCE), {"subscription-userinfo": "upload=10; download=20; total=100; expire=1893456000"})
+    meta = subscription_meta(yaml.safe_load(SOURCE), {
+        "subscription-userinfo": "upload=10; download=20; total=100; expire=1893456000",
+        "profile-title": "base64:8J+agE92ZXJTZWN1cmUgVlBOKDRHKQ==",
+    })
     assert meta["subscription"]["used"] == 30
     assert meta["subscription"]["remaining"] == 70
     assert meta["subscription"]["expire_at"].startswith("2030-01-01")
+    assert meta["provider_name"] == "🚀OverSecure VPN(4G)"

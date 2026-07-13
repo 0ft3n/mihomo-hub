@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
+import base64
 import secrets
 import re
 import yaml
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
@@ -61,12 +62,13 @@ async def initial_import(body: ImportRequest, db: Session = Depends(get_db)):
     if existing:
         return {"token": make_session(existing.account_id), "account_key": existing.account.access_token}
     raw, parsed, headers = await fetch_yaml(url)
+    meta = subscription_meta(parsed, headers)
     account = Account()
     db.add(account)
     db.flush()
     defaults = db.get(Setting, 1).default_modifications
-    sub = Subscription(account_id=account.id, source_url=url, name=name_from_url(url),
-                       cached_yaml=raw, source_meta=subscription_meta(parsed, headers))
+    sub = Subscription(account_id=account.id, source_url=url, name=meta.get("provider_name") or name_from_url(url),
+                       cached_yaml=raw, source_meta=meta)
     db.add(sub)
     db.flush()
     db.add(Profile(subscription_id=sub.id, name="Основной профиль", modifications=defaults))
@@ -102,8 +104,9 @@ async def add_subscription(body: ImportRequest, account_id: int = Depends(curren
     if db.scalar(select(Subscription).where(Subscription.source_url == url)):
         raise HTTPException(409, "Эта подписка уже добавлена")
     raw, parsed, headers = await fetch_yaml(url)
-    sub = Subscription(account_id=account_id, source_url=url, name=name_from_url(url),
-                       cached_yaml=raw, source_meta=subscription_meta(parsed, headers))
+    meta = subscription_meta(parsed, headers)
+    sub = Subscription(account_id=account_id, source_url=url, name=meta.get("provider_name") or name_from_url(url),
+                       cached_yaml=raw, source_meta=meta)
     db.add(sub); db.flush()
     db.add(Profile(subscription_id=sub.id, name="Основной профиль", modifications=db.get(Setting, 1).default_modifications))
     db.commit()
@@ -124,7 +127,10 @@ def subscription(sub_id: int, account_id: int = Depends(current_account_id), db:
 @app.patch("/api/subscriptions/{sub_id}")
 def update_subscription(sub_id: int, body: SubscriptionUpdate, account_id: int = Depends(current_account_id), db: Session = Depends(get_db)):
     sub = owned_subscription(db, sub_id, account_id)
-    for key, value in body.model_dump(exclude_none=True).items(): setattr(sub, key, value)
+    changes = body.model_dump(exclude_none=True)
+    for key, value in changes.items(): setattr(sub, key, value)
+    if "name" in changes:
+        sub.source_meta = {**sub.source_meta, "name_overridden": True}
     db.commit(); return serialize_subscription(sub)
 
 
@@ -132,8 +138,11 @@ def update_subscription(sub_id: int, body: SubscriptionUpdate, account_id: int =
 async def refresh(sub_id: int, account_id: int = Depends(current_account_id), db: Session = Depends(get_db)):
     sub = owned_subscription(db, sub_id, account_id)
     raw, parsed, headers = await fetch_yaml(sub.source_url)
+    old_meta = sub.source_meta
     sub.cached_yaml = raw
-    sub.source_meta = subscription_meta(parsed, headers, sub.source_meta)
+    sub.source_meta = subscription_meta(parsed, headers, old_meta)
+    if not old_meta.get("name_overridden") and sub.source_meta.get("provider_name"):
+        sub.name = sub.source_meta["provider_name"]
     sub.updated_at = datetime.now(timezone.utc)
     db.commit(); return serialize_subscription(sub, True)
 
@@ -183,9 +192,15 @@ async def public_subscription(slug: str, db: Session = Depends(get_db)):
         upstream_headers = sub.source_meta.get("response_headers", {})
     if not raw: raise HTTPException(502, "Источник подписки временно недоступен")
     rendered = apply_modifications(raw, p.modifications)
-    response_headers = {"Content-Disposition": "inline; filename=profile.yaml"}
+    safe_filename = re.sub(r"[^A-Za-z0-9._-]+", "_", sub.name).strip("_") or "profile"
+    encoded_title = base64.b64encode(sub.name.encode("utf-8")).decode("ascii")
+    response_headers = {
+        "Content-Disposition": f"inline; filename=\"{safe_filename}.yaml\"; filename*=UTF-8''{quote(sub.name)}.yaml",
+        "Profile-Title": f"base64:{encoded_title}",
+    }
     for key, value in upstream_headers.items():
         response_headers[key] = value
+    response_headers["Profile-Title"] = f"base64:{encoded_title}"
     response_headers.setdefault("profile-update-interval", "24")
     return Response(rendered, media_type="text/yaml; charset=utf-8", headers=response_headers)
 

@@ -284,8 +284,12 @@ function Subscription({ sub, reload }: { sub: Sub; reload: () => void }) {
   const [tab, setTab] = useState("overview");
   const [full, setFull] = useState<Sub>();
   const [edit, setEdit] = useState<Profile>();
+  const [renaming, setRenaming] = useState(false);
+  const [subscriptionName, setSubscriptionName] = useState(sub.name);
   useEffect(() => {
     api(`/subscriptions/${sub.id}`).then(setFull);
+    setSubscriptionName(sub.name);
+    setRenaming(false);
   }, [sub.id]);
   const data = full || sub;
   if (edit)
@@ -347,25 +351,72 @@ function Subscription({ sub, reload }: { sub: Sub; reload: () => void }) {
                 <Database />
               </span>
               <div>
-                <h3>Исходная подписка</h3>
+                {renaming ? (
+                  <input
+                    className="sourceNameInput"
+                    value={subscriptionName}
+                    maxLength={160}
+                    autoFocus
+                    onChange={(e) => setSubscriptionName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        setSubscriptionName(data.name);
+                        setRenaming(false);
+                      }
+                    }}
+                  />
+                ) : (
+                  <h3>{data.name}</h3>
+                )}
                 <p>{data.source_url}</p>
               </div>
             </div>
-            <button
-              onClick={async () => {
-                const refreshed = await api(
-                  `/subscriptions/${sub.id}/refresh`,
-                  {
-                    method: "POST",
-                  },
-                );
-                setFull(refreshed);
-                reload();
-              }}
-            >
-              <RefreshCw />
-              Обновить
-            </button>
+            <div className="sourceActions">
+              {renaming ? (
+                <>
+                  <button
+                    onClick={() => {
+                      setSubscriptionName(data.name);
+                      setRenaming(false);
+                    }}
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    className="primary"
+                    disabled={!subscriptionName.trim()}
+                    onClick={async () => {
+                      const updated = await api(`/subscriptions/${sub.id}`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ name: subscriptionName.trim() }),
+                      });
+                      setFull({ ...data, ...updated, yaml: data.yaml });
+                      setRenaming(false);
+                      reload();
+                    }}
+                  >
+                    <Save /> Сохранить имя
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setRenaming(true)}>
+                  <Settings /> Переименовать
+                </button>
+              )}
+              <button
+                onClick={async () => {
+                  const refreshed = await api(
+                    `/subscriptions/${sub.id}/refresh`,
+                    { method: "POST" },
+                  );
+                  setFull(refreshed);
+                  setSubscriptionName(refreshed.name);
+                  reload();
+                }}
+              >
+                <RefreshCw /> Обновить
+              </button>
+            </div>
           </section>
           <div className="sectionTitle">
             <div>
@@ -471,6 +522,9 @@ function SubscriptionUsage({ info }: { info?: any }) {
     : 0;
   const expires = info.expire_at ? new Date(info.expire_at) : null;
   const expired = expires ? expires.getTime() < Date.now() : false;
+  const daysRemaining = expires
+    ? Math.max(Math.ceil((expires.getTime() - Date.now()) / 86_400_000), 0)
+    : null;
   return (
     <section className="panel usagePanel">
       <div className="usageSummary">
@@ -490,11 +544,11 @@ function SubscriptionUsage({ info }: { info?: any }) {
           <small>Действует до</small>
           <b>
             {expires
-              ? expires.toLocaleString("ru-RU", {
+              ? `${daysRemaining} дн. · ${expires.toLocaleDateString("ru-RU", {
                   day: "2-digit",
-                  month: "long",
+                  month: "short",
                   year: "numeric",
-                })
+                })}`
               : "Без срока"}
           </b>
         </div>
