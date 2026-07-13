@@ -350,11 +350,13 @@ function Combobox({
   onChange,
   options,
   placeholder,
+  badges = {},
 }: {
   value: string;
   onChange: (value: string) => void;
   options: string[];
   placeholder: string;
+  badges?: Record<string, string>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -409,7 +411,10 @@ function Combobox({
                 }}
               >
                 <span>{option}</span>
-                {option === value && <Check />}
+                <span className="comboOptionMeta">
+                  {badges[option] && <small>{badges[option]}</small>}
+                  {option === value && <Check />}
+                </span>
               </button>
             ))
           ) : (
@@ -526,13 +531,52 @@ function Subscription({ sub, reload }: { sub: Sub; reload: () => void }) {
     setRenaming(false);
   }, [sub.id]);
   const data = full || sub;
+  const sourceCatalog = useMemo(() => {
+    try {
+      const parsed = parseYaml(data.yaml || "") || {};
+      return {
+        proxies: Array.isArray(parsed.proxies)
+          ? parsed.proxies
+              .filter((item: any) => item && typeof item.name === "string")
+              .map((item: any) => item.name)
+          : [],
+        groups: Array.isArray(parsed["proxy-groups"])
+          ? parsed["proxy-groups"]
+              .filter((item: any) => item && typeof item.name === "string")
+              .map((item: any) => item.name)
+          : [],
+        ruleProviders:
+          parsed["rule-providers"] &&
+          typeof parsed["rule-providers"] === "object"
+            ? Object.keys(parsed["rule-providers"])
+            : [],
+      };
+    } catch {
+      return { proxies: [], groups: [], ruleProviders: [] };
+    }
+  }, [data.yaml]);
   if (edit)
     return (
       <Editor
         profile={edit}
-        proxies={data.source_meta.proxy_names || []}
-        groups={data.source_meta.group_names || []}
-        ruleProviders={data.source_meta.rule_provider_names || []}
+        proxies={[
+          ...new Set([
+            ...(data.source_meta.proxy_names || []),
+            ...sourceCatalog.proxies,
+          ]),
+        ]}
+        groups={[
+          ...new Set([
+            ...(data.source_meta.group_names || []),
+            ...sourceCatalog.groups,
+          ]),
+        ]}
+        ruleProviders={[
+          ...new Set([
+            ...(data.source_meta.rule_provider_names || []),
+            ...sourceCatalog.ruleProviders,
+          ]),
+        ]}
         sourceYaml={data.yaml || ""}
         back={() => setEdit(undefined)}
         saved={() => {
@@ -956,6 +1000,18 @@ function Editor({
     ],
     [groups, proxies],
   );
+  const targetBadges = useMemo(
+    () =>
+      Object.fromEntries([
+        ...proxies.map((name) => [name, "Прокси"]),
+        ...groups.map((name) => [name, "Группа"]),
+        ...["DIRECT", "REJECT", "REJECT-DROP", "PASS"].map((name) => [
+          name,
+          "Политика",
+        ]),
+      ]),
+    [groups, proxies],
+  );
   const valueSuggestions = useMemo(() => {
     if (ruleType === "RULE-SET") return ruleProviders;
     if (ruleType === "GEOSITE")
@@ -1235,6 +1291,7 @@ function Editor({
                     onChange={setRuleTarget}
                     options={targetSuggestions}
                     placeholder="Выберите политику"
+                    badges={targetBadges}
                   />
                 </label>
                 {supportsNoResolve && (
