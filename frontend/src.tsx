@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
+  Check,
+  ChevronDown,
   ChevronRight,
   CirclePlus,
   Clipboard,
@@ -22,6 +24,7 @@ import {
   Shield,
   Sun,
   Trash2,
+  X,
 } from "lucide-react";
 import MonacoEditor from "@monaco-editor/react";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -82,6 +85,9 @@ function App() {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [admin, setAdmin] = useState(false);
   const [networkBusy, setNetworkBusy] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [newSubscriptionUrl, setNewSubscriptionUrl] = useState("");
+  const [addError, setAddError] = useState("");
   useEffect(() => {
     const listener = (event: Event) =>
       setNetworkBusy((event as CustomEvent<boolean>).detail);
@@ -150,19 +156,7 @@ function App() {
               <ChevronRight className="chev" />
             </button>
           ))}
-          <button
-            className="subtle"
-            onClick={async () => {
-              const u = prompt("URL новой подписки");
-              if (u) {
-                await api("/subscriptions", {
-                  method: "POST",
-                  body: JSON.stringify({ url: u }),
-                });
-                load();
-              }
-            }}
-          >
+          <button className="subtle" onClick={() => setAddOpen(true)}>
             <CirclePlus />
             Добавить подписку
           </button>
@@ -208,6 +202,127 @@ function App() {
           <Empty />
         )}
       </main>
+      {addOpen && (
+        <div
+          className="modalBackdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setAddOpen(false);
+          }}
+        >
+          <form
+            className="subscriptionModal"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setAddError("");
+              try {
+                await api("/subscriptions", {
+                  method: "POST",
+                  body: JSON.stringify({ url: newSubscriptionUrl.trim() }),
+                });
+                setNewSubscriptionUrl("");
+                setAddOpen(false);
+                load();
+              } catch (error: any) {
+                setAddError(error.message);
+              }
+            }}
+          >
+            <button
+              type="button"
+              className="modalClose"
+              aria-label="Закрыть"
+              onClick={() => setAddOpen(false)}
+            >
+              <X />
+            </button>
+            <div className="modalIcon">
+              <CirclePlus />
+            </div>
+            <h2>Добавить подписку</h2>
+            <p>
+              Вставьте ссылку Clash Meta/Mihomo. Мы проверим конфигурацию и
+              создадим первый профиль.
+            </p>
+            <label>
+              Ссылка на подписку
+              <div className="modalUrlInput">
+                <Globe2 />
+                <input
+                  type="url"
+                  required
+                  autoFocus
+                  value={newSubscriptionUrl}
+                  onChange={(e) => setNewSubscriptionUrl(e.target.value)}
+                  placeholder="https://provider.example/subscription-id"
+                />
+              </div>
+            </label>
+            {addError && <div className="error modalError">{addError}</div>}
+            <div className="modalActions">
+              <button type="button" onClick={() => setAddOpen(false)}>
+                Отмена
+              </button>
+              <button className="primary" disabled={networkBusy}>
+                {networkBusy ? <RefreshCw className="spin" /> : <CirclePlus />}
+                {networkBusy ? "Проверяем..." : "Добавить подписку"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SelectField({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value);
+  return (
+    <div className={open ? "customSelect open" : "customSelect"}>
+      {open && (
+        <button
+          type="button"
+          className="selectDismiss"
+          onClick={() => setOpen(false)}
+        />
+      )}
+      <button
+        type="button"
+        className="selectTrigger"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <span>{selected?.label || value}</span>
+        <ChevronDown />
+      </button>
+      {open && (
+        <div className="selectMenu" role="listbox">
+          {options.map((option) => (
+            <button
+              type="button"
+              role="option"
+              aria-selected={option.value === value}
+              className={option.value === value ? "selected" : ""}
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+            >
+              <span>{option.label}</span>
+              {option.value === value && <Check />}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -856,23 +971,25 @@ function Editor({
           <div className="geoOptions">
             <label>
               <span>GeoIP Data Mode</span>
-              <select
+              <SelectField
                 value={geo ? "dat" : "mmdb"}
-                onChange={(e) => setGeo(e.target.value === "dat")}
-              >
-                <option value="dat">DAT</option>
-                <option value="mmdb">MMDB</option>
-              </select>
+                onChange={(value) => setGeo(value === "dat")}
+                options={[
+                  { value: "dat", label: "DAT" },
+                  { value: "mmdb", label: "MMDB" },
+                ]}
+              />
             </label>
             <label>
               <span>Загрузчик</span>
-              <select
+              <SelectField
                 value={geoLoader}
-                onChange={(e) => setGeoLoader(e.target.value)}
-              >
-                <option value="memconservative">Экономия памяти</option>
-                <option value="standard">Стандартный</option>
-              </select>
+                onChange={setGeoLoader}
+                options={[
+                  { value: "memconservative", label: "Экономия памяти" },
+                  { value: "standard", label: "Стандартный" },
+                ]}
+              />
             </label>
             <label>
               <span>Интервал обновления, часов</span>
