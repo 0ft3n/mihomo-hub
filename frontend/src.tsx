@@ -375,6 +375,22 @@ function Subscription({ sub, reload }: { sub: Sub; reload: () => void }) {
               {renaming ? (
                 <>
                   <button
+                    className="resetName"
+                    title="Вернуть название из исходной подписки"
+                    onClick={async () => {
+                      const updated = await api(
+                        `/subscriptions/${sub.id}/reset-name`,
+                        { method: "POST" },
+                      );
+                      setSubscriptionName(updated.name);
+                      setFull({ ...data, ...updated, yaml: data.yaml });
+                      setRenaming(false);
+                      reload();
+                    }}
+                  >
+                    <RefreshCw /> Сбросить к исходному
+                  </button>
+                  <button
                     onClick={() => {
                       setSubscriptionName(data.name);
                       setRenaming(false);

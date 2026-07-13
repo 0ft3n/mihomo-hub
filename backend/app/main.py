@@ -134,6 +134,17 @@ def update_subscription(sub_id: int, body: SubscriptionUpdate, account_id: int =
     db.commit(); return serialize_subscription(sub)
 
 
+@app.post("/api/subscriptions/{sub_id}/reset-name")
+def reset_subscription_name(sub_id: int, account_id: int = Depends(current_account_id), db: Session = Depends(get_db)):
+    sub = owned_subscription(db, sub_id, account_id)
+    meta = dict(sub.source_meta)
+    meta.pop("name_overridden", None)
+    sub.source_meta = meta
+    sub.name = meta.get("provider_name") or name_from_url(sub.source_url)
+    db.commit()
+    return serialize_subscription(sub)
+
+
 @app.post("/api/subscriptions/{sub_id}/refresh")
 async def refresh(sub_id: int, account_id: int = Depends(current_account_id), db: Session = Depends(get_db)):
     sub = owned_subscription(db, sub_id, account_id)
