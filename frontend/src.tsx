@@ -46,20 +46,33 @@ type Sub = {
   yaml?: string;
 };
 const token = () => localStorage.getItem("token");
+let activeRequests = 0;
+function emitLoading() {
+  window.dispatchEvent(
+    new CustomEvent("mihomo-loading", { detail: activeRequests > 0 }),
+  );
+}
 async function api(path: string, options: any = {}) {
-  const r = await fetch(API + path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token()}`,
-      ...options.headers,
-    },
-  });
-  if (!r.ok)
-    throw new Error(
-      (await r.json().catch(() => ({}))).detail || "Ошибка запроса",
-    );
-  return r.status === 204 ? null : r.json();
+  activeRequests += 1;
+  emitLoading();
+  try {
+    const r = await fetch(API + path, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token()}`,
+        ...options.headers,
+      },
+    });
+    if (!r.ok)
+      throw new Error(
+        (await r.json().catch(() => ({}))).detail || "Ошибка запроса",
+      );
+    return r.status === 204 ? null : r.json();
+  } finally {
+    activeRequests = Math.max(activeRequests - 1, 0);
+    emitLoading();
+  }
 }
 
 function App() {
@@ -68,6 +81,13 @@ function App() {
   const [active, setActive] = useState<number>();
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [admin, setAdmin] = useState(false);
+  const [networkBusy, setNetworkBusy] = useState(false);
+  useEffect(() => {
+    const listener = (event: Event) =>
+      setNetworkBusy((event as CustomEvent<boolean>).detail);
+    window.addEventListener("mihomo-loading", listener);
+    return () => window.removeEventListener("mihomo-loading", listener);
+  }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("theme", theme);
@@ -96,6 +116,9 @@ function App() {
   const sub = subs.find((s) => s.id === active);
   return (
     <div className="shell">
+      <div className={networkBusy ? "networkProgress show" : "networkProgress"}>
+        <i />
+      </div>
       <aside>
         <div className="brand">
           <div className="logo">
@@ -178,9 +201,9 @@ function App() {
           </div>
         </header>
         {admin ? (
-          <Admin />
+          <Admin key="admin" />
         ) : sub ? (
-          <Subscription sub={sub} reload={load} />
+          <Subscription key={sub.id} sub={sub} reload={load} />
         ) : (
           <Empty />
         )}
@@ -541,6 +564,13 @@ function SubscriptionUsage({ info }: { info?: any }) {
   const daysRemaining = expires
     ? Math.max(Math.ceil((expires.getTime() - Date.now()) / 86_400_000), 0)
     : null;
+  const daysLabel = (() => {
+    const value = daysRemaining || 0;
+    if (value % 100 >= 11 && value % 100 <= 14) return "дней";
+    if (value % 10 === 1) return "день";
+    if (value % 10 >= 2 && value % 10 <= 4) return "дня";
+    return "дней";
+  })();
   return (
     <section className="panel usagePanel">
       <div className="usageSummary">
@@ -556,17 +586,32 @@ function SubscriptionUsage({ info }: { info?: any }) {
           <small>Общий лимит</small>
           <b>{info.total ? formatBytes(info.total) : "Без лимита"}</b>
         </div>
-        <div className={expired ? "expired" : ""}>
-          <small>Действует до</small>
-          <b>
-            {expires
-              ? `${daysRemaining} дн. · ${expires.toLocaleDateString("ru-RU", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })}`
-              : "Без срока"}
-          </b>
+        <div className={expired ? "expired expiryDetails" : "expiryDetails"}>
+          {expires ? (
+            <>
+              <span>
+                <small>Действует ещё</small>
+                <b>
+                  {expired ? "Срок истёк" : `${daysRemaining} ${daysLabel}`}
+                </b>
+              </span>
+              <span>
+                <small>Действует до</small>
+                <b>
+                  {expires.toLocaleDateString("ru-RU", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </b>
+              </span>
+            </>
+          ) : (
+            <span>
+              <small>Срок действия</small>
+              <b>Без срока</b>
+            </span>
+          )}
         </div>
       </div>
       {info.total > 0 && (
