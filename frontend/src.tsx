@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
+  ArrowDownToLine,
+  ArrowUpToLine,
   Check,
   ChevronDown,
   ChevronRight,
@@ -12,6 +14,7 @@ import {
   ExternalLink,
   FileCog,
   Globe2,
+  GripVertical,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -947,6 +950,7 @@ function Editor({
   const [ruleTarget, setRuleTarget] = useState(groups[0] || "DIRECT");
   const [ruleNoResolve, setRuleNoResolve] = useState(false);
   const [ruleText, setRuleText] = useState("");
+  const [draggedRuleIndex, setDraggedRuleIndex] = useState<number | null>(null);
   const [overrides, setOverrides] = useState(
     stringifyYaml(profile.modifications.overrides || {}, { lineWidth: 120 }),
   );
@@ -1040,7 +1044,7 @@ function Editor({
     "IP-CIDR6",
     "SRC-IP-CIDR",
   ].includes(ruleType);
-  function addComposedRule() {
+  function addComposedRule(position: "prepend" | "append" = "append") {
     const candidate =
       ruleMode === "text"
         ? ruleText.trim().replace(/^[-*]\s+/, "")
@@ -1057,10 +1061,28 @@ function Editor({
       setErr("Заполните все поля правила");
       return;
     }
-    setRules(rules.includes(candidate) ? rules : [...rules, candidate]);
+    setRules((current) =>
+      current.includes(candidate)
+        ? current
+        : position === "prepend"
+          ? [candidate, ...current]
+          : [...current, candidate],
+    );
     setRuleValue("");
     setRuleText("");
     setErr("");
+  }
+  function moveRule(from: number, to: number) {
+    if (from === to) return;
+    setRules((current) => {
+      if (from < 0 || to < 0 || from >= current.length || to >= current.length) {
+        return current;
+      }
+      const next = [...current];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
   }
   const parsedBulkRules = useMemo(() => {
     if (!bulkText.trim()) return [];
@@ -1335,7 +1357,7 @@ function Editor({
                   value={ruleText}
                   onChange={(e) => setRuleText(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") addComposedRule();
+                    if (e.key === "Enter") addComposedRule("append");
                   }}
                   placeholder="DOMAIN-SUFFIX,example.com,🚀 Main"
                   autoFocus
@@ -1355,9 +1377,20 @@ function Editor({
                         : []),
                     ].join(",")}
               </code>
-              <button className="primary" onClick={addComposedRule}>
-                <CirclePlus /> Добавить правило
-              </button>
+              <div className="composerActions">
+                <button
+                  className="secondaryAction"
+                  onClick={() => addComposedRule("prepend")}
+                >
+                  <ArrowUpToLine /> В начало
+                </button>
+                <button
+                  className="primary"
+                  onClick={() => addComposedRule("append")}
+                >
+                  <ArrowDownToLine /> В конец
+                </button>
+              </div>
             </div>
           </div>
           <div className="bulkRules">
@@ -1402,7 +1435,35 @@ function Editor({
             )}
           </div>
           {rules.map((r, i) => (
-            <div className="rule" key={i}>
+            <div
+              className={draggedRuleIndex === i ? "rule draggingRule" : "rule"}
+              key={`${i}-${r}`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const from = Number(e.dataTransfer.getData("text/plain"));
+                moveRule(Number.isNaN(from) ? draggedRuleIndex ?? i : from, i);
+                setDraggedRuleIndex(null);
+              }}
+              onDragEnd={() => setDraggedRuleIndex(null)}
+            >
+              <button
+                className="dragHandle"
+                type="button"
+                draggable
+                aria-label="Перетащить правило"
+                title="Перетащить"
+                onDragStart={(e) => {
+                  setDraggedRuleIndex(i);
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", String(i));
+                }}
+              >
+                <GripVertical />
+              </button>
               <input
                 value={r}
                 onChange={(e) =>
