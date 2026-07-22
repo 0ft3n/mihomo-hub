@@ -968,7 +968,7 @@ function Editor({
   const [ruleTarget, setRuleTarget] = useState(groups[0] || "DIRECT");
   const [ruleNoResolve, setRuleNoResolve] = useState(false);
   const [ruleText, setRuleText] = useState("");
-  const [draggedRuleIndex, setDraggedRuleIndex] = useState<number | null>(null);
+  const [draggedRuleId, setDraggedRuleId] = useState<string | null>(null);
   const ruleRefs = useRef(new Map<string, HTMLDivElement>());
   const previousRulePositions = useRef(new Map<string, number>());
   const [overrides, setOverrides] = useState(
@@ -1133,7 +1133,6 @@ function Editor({
     snapshotRulePositions();
     setRules((current) => moveItem(current, from, to));
     setRuleIds((current) => moveItem(current, from, to));
-    setDraggedRuleIndex(to);
   }
   const parsedBulkRules = useMemo(() => {
     if (!bulkText.trim()) return [];
@@ -1488,7 +1487,9 @@ function Editor({
           </div>
           {rules.map((r, i) => (
             <div
-              className={draggedRuleIndex === i ? "rule draggingRule" : "rule"}
+              className={
+                draggedRuleId === ruleIds[i] ? "rule draggingRule" : "rule"
+              }
               key={ruleIds[i]}
               ref={(element) => {
                 const key = ruleIds[i];
@@ -1499,15 +1500,18 @@ function Editor({
               onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
-                if (draggedRuleIndex !== null && draggedRuleIndex !== i) {
-                  moveRule(draggedRuleIndex, i);
+                const from = draggedRuleId
+                  ? ruleIds.indexOf(draggedRuleId)
+                  : -1;
+                if (from >= 0 && from !== i) {
+                  moveRule(from, i);
                 }
               }}
               onDrop={(e) => {
                 e.preventDefault();
-                setDraggedRuleIndex(null);
+                setDraggedRuleId(null);
               }}
-              onDragEnd={() => setDraggedRuleIndex(null)}
+              onDragEnd={() => setDraggedRuleId(null)}
             >
               <button
                 className="dragHandle"
@@ -1516,9 +1520,9 @@ function Editor({
                 aria-label="Перетащить правило"
                 title="Перетащить"
                 onDragStart={(e) => {
-                  setDraggedRuleIndex(i);
+                  setDraggedRuleId(ruleIds[i]);
                   e.dataTransfer.effectAllowed = "move";
-                  e.dataTransfer.setData("text/plain", String(i));
+                  e.dataTransfer.setData("text/plain", ruleIds[i]);
                 }}
               >
                 <GripVertical />
