@@ -1658,6 +1658,7 @@ function Admin({
   const [data, setData] = useState<any>();
   const [defaultProfiles, setDefaultProfiles] = useState<DefaultProfile[]>([]);
   const [customRuleSets, setCustomRuleSets] = useState<CustomRuleSet[]>([]);
+  const [customRuleSetIds, setCustomRuleSetIds] = useState<string[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<number>(0);
   const [editTemplate, setEditTemplate] = useState<number>();
   const [message, setMessage] = useState("");
@@ -1670,6 +1671,7 @@ function Admin({
       setData(x);
       setDefaultProfiles(x.default_profiles || []);
       setCustomRuleSets(x.custom_rule_sets || []);
+      setCustomRuleSetIds((x.custom_rule_sets || []).map(() => newRuleId()));
       onRuleSetsChange(x.custom_rule_sets || []);
       setSelectedSourceId(x.subscriptions[0]?.id || 0);
     } catch (e: any) {
@@ -1686,13 +1688,16 @@ function Admin({
     setMessage("Шаблоны профилей сохранены");
     return saved;
   }
-  async function saveRuleSets(next: CustomRuleSet[]) {
-    const saved = await api("/admin/rule-sets", {
+  async function saveRuleSets(next: CustomRuleSet[], nextIds?: string[]) {
+    const saved = (await api("/admin/rule-sets", {
       method: "PUT",
       headers: { "X-Admin-Password": pass },
       body: JSON.stringify(next),
-    });
+    })) as CustomRuleSet[];
     setCustomRuleSets(saved);
+    setCustomRuleSetIds((current) =>
+      saved.map((_, index) => nextIds?.[index] || current[index] || newRuleId()),
+    );
     onRuleSetsChange(saved);
     setMessage("Rule sets сохранены");
     return saved;
@@ -1875,8 +1880,8 @@ function Admin({
             </div>
             <button
               className="primary"
-              onClick={() =>
-                saveRuleSets([
+              onClick={() => {
+                const next: CustomRuleSet[] = [
                   ...customRuleSets,
                   {
                     name: `custom-${customRuleSets.length + 1}`,
@@ -1884,15 +1889,19 @@ function Admin({
                     payload: "DOMAIN-SUFFIX,example.com\n",
                     enabled: true,
                   },
-                ])
-              }
+                ];
+                saveRuleSets(next, [...customRuleSetIds, newRuleId()]);
+              }}
             >
               <CirclePlus /> Добавить набор
             </button>
           </div>
           <div className="ruleSetList">
             {customRuleSets.map((ruleSet, index) => (
-              <article className="ruleSetCard" key={`${ruleSet.name}-${index}`}>
+              <article
+                className="ruleSetCard"
+                key={customRuleSetIds[index] || `rule-set-${index}`}
+              >
                 <div className="ruleSetHead">
                   <label>
                     <span>Имя</span>
@@ -1963,13 +1972,17 @@ function Admin({
                   <code>/rule-sets/{encodeURIComponent(ruleSet.name)}.list</code>
                   <button
                     className="dangerButton"
-                    onClick={() =>
+                    onClick={() => {
+                      const nextIds = customRuleSetIds.filter(
+                        (_, itemIndex) => itemIndex !== index,
+                      );
                       saveRuleSets(
                         customRuleSets.filter(
                           (_, itemIndex) => itemIndex !== index,
                         ),
-                      )
-                    }
+                        nextIds,
+                      );
+                    }}
                   >
                     <Trash2 /> Удалить
                   </button>
