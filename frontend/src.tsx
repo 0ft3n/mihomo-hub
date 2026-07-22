@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
@@ -52,6 +58,15 @@ const RULE_TYPES = [
   "RULE-SET",
   "MATCH",
 ];
+const newRuleId = () =>
+  globalThis.crypto?.randomUUID?.() ||
+  `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const moveItem = <T,>(items: T[], from: number, to: number) => {
+  const next = [...items];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+};
 type Profile = {
   id: number;
   name: string;
@@ -942,6 +957,9 @@ function Editor({
   const [rules, setRules] = useState<string[]>(
     profile.modifications.rules || [],
   );
+  const [ruleIds, setRuleIds] = useState<string[]>(() =>
+    (profile.modifications.rules || []).map(() => newRuleId()),
+  );
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [ruleMode, setRuleMode] = useState<"builder" | "text">("builder");
@@ -951,6 +969,8 @@ function Editor({
   const [ruleNoResolve, setRuleNoResolve] = useState(false);
   const [ruleText, setRuleText] = useState("");
   const [draggedRuleIndex, setDraggedRuleIndex] = useState<number | null>(null);
+  const ruleRefs = useRef(new Map<string, HTMLDivElement>());
+  const previousRulePositions = useRef(new Map<string, number>());
   const [overrides, setOverrides] = useState(
     stringifyYaml(profile.modifications.overrides || {}, { lineWidth: 120 }),
   );
@@ -1044,6 +1064,37 @@ function Editor({
     "IP-CIDR6",
     "SRC-IP-CIDR",
   ].includes(ruleType);
+  function snapshotRulePositions() {
+    previousRulePositions.current = new Map(
+      [...ruleRefs.current.entries()].map(([key, element]) => [
+        key,
+        element.getBoundingClientRect().top,
+      ]),
+    );
+  }
+  useLayoutEffect(() => {
+    if (!previousRulePositions.current.size) return;
+    const positions = previousRulePositions.current;
+    previousRulePositions.current = new Map();
+    ruleRefs.current.forEach((element, key) => {
+      const previousTop = positions.get(key);
+      if (previousTop === undefined) return;
+      const delta = previousTop - element.getBoundingClientRect().top;
+      if (!delta) return;
+      element.style.transition = "none";
+      element.style.transform = `translateY(${delta}px)`;
+      element.getBoundingClientRect();
+      requestAnimationFrame(() => {
+        element.style.transition = "";
+        element.style.transform = "";
+      });
+    });
+  }, [rules]);
+  useEffect(() => {
+    setRuleIds((current) =>
+      rules.map((_, index) => current[index] || newRuleId()),
+    );
+  }, [rules.length]);
   function addComposedRule(position: "prepend" | "append" = "append") {
     const candidate =
       ruleMode === "text"
@@ -1061,12 +1112,14 @@ function Editor({
       setErr("Заполните все поля правила");
       return;
     }
+    if (rules.includes(candidate)) return;
     setRules((current) =>
-      current.includes(candidate)
-        ? current
-        : position === "prepend"
-          ? [candidate, ...current]
-          : [...current, candidate],
+      position === "prepend" ? [candidate, ...current] : [...current, candidate],
+    );
+    setRuleIds((current) =>
+      position === "prepend"
+        ? [newRuleId(), ...current]
+        : [...current, newRuleId()],
     );
     setRuleValue("");
     setRuleText("");
@@ -1074,15 +1127,13 @@ function Editor({
   }
   function moveRule(from: number, to: number) {
     if (from === to) return;
-    setRules((current) => {
-      if (from < 0 || to < 0 || from >= current.length || to >= current.length) {
-        return current;
-      }
-      const next = [...current];
-      const [item] = next.splice(from, 1);
-      next.splice(to, 0, item);
-      return next;
-    });
+    if (from < 0 || to < 0 || from >= rules.length || to >= rules.length) {
+      return;
+    }
+    snapshotRulePositions();
+    setRules((current) => moveItem(current, from, to));
+    setRuleIds((current) => moveItem(current, from, to));
+    setDraggedRuleIndex(to);
   }
   const parsedBulkRules = useMemo(() => {
     if (!bulkText.trim()) return [];
@@ -1117,11 +1168,12 @@ function Editor({
       setErr("Не найдено ни одного правила Mihomo");
       return;
     }
-    setRules(
+    const nextRules =
       mode === "replace"
         ? [...new Set(parsedBulkRules)]
-        : [...new Set([...rules, ...parsedBulkRules])],
-    );
+        : [...new Set([...rules, ...parsedBulkRules])];
+    setRules(nextRules);
+    setRuleIds(nextRules.map(() => newRuleId()));
     setBulkText("");
     setBulkOpen(false);
     setErr("");
@@ -1437,15 +1489,22 @@ function Editor({
           {rules.map((r, i) => (
             <div
               className={draggedRuleIndex === i ? "rule draggingRule" : "rule"}
-              key={`${i}-${r}`}
+              key={ruleIds[i]}
+              ref={(element) => {
+                const key = ruleIds[i];
+                if (!key) return;
+                if (element) ruleRefs.current.set(key, element);
+                else ruleRefs.current.delete(key);
+              }}
               onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
+                if (draggedRuleIndex !== null && draggedRuleIndex !== i) {
+                  moveRule(draggedRuleIndex, i);
+                }
               }}
               onDrop={(e) => {
                 e.preventDefault();
-                const from = Number(e.dataTransfer.getData("text/plain"));
-                moveRule(Number.isNaN(from) ? draggedRuleIndex ?? i : from, i);
                 setDraggedRuleIndex(null);
               }}
               onDragEnd={() => setDraggedRuleIndex(null)}
@@ -1470,7 +1529,12 @@ function Editor({
                   setRules(rules.map((x, j) => (j === i ? e.target.value : x)))
                 }
               />
-              <button onClick={() => setRules(rules.filter((_, j) => j !== i))}>
+              <button
+                onClick={() => {
+                  setRules(rules.filter((_, j) => j !== i));
+                  setRuleIds(ruleIds.filter((_, j) => j !== i));
+                }}
+              >
                 <Trash2 />
               </button>
             </div>
