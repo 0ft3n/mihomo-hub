@@ -1504,6 +1504,13 @@ function Editor({
                   ? ruleIds.indexOf(draggedRuleId)
                   : -1;
                 if (from >= 0 && from !== i) {
+                  const box = e.currentTarget.getBoundingClientRect();
+                  const cursorY = e.clientY - box.top;
+                  const movingDown = from < i;
+                  const shouldMove = movingDown
+                    ? cursorY > box.height * 0.65
+                    : cursorY < box.height * 0.35;
+                  if (!shouldMove) return;
                   moveRule(from, i);
                 }
               }}
