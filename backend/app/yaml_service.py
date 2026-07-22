@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 from typing import Any
 import base64
 import httpx
+import re
 import yaml
 from fastapi import HTTPException
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 from .config import settings
 from .security import validate_public_url
 
@@ -68,9 +69,32 @@ def deep_merge(target: dict, patch: dict) -> dict:
     return target
 
 
-def apply_modifications(source: str, mods: dict) -> str:
+def rule_set_provider(name: str, behavior: str) -> dict[str, Any]:
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "rule-set"
+    return {
+        "type": "http",
+        "behavior": behavior,
+        "format": "text",
+        "url": f"{settings.public_url}/rule-sets/{quote(name, safe='')}.list",
+        "path": f"./rule-sets/mihomo-hub-{safe_name}.list",
+        "interval": 86400,
+    }
+
+
+def apply_modifications(source: str, mods: dict, custom_rule_sets: list[dict] | None = None) -> str:
     config = yaml.safe_load(source)
     deep_merge(config, mods.get("overrides", {}))
+    enabled_rule_sets = [
+        item for item in (custom_rule_sets or [])
+        if isinstance(item, dict) and item.get("enabled", True) and item.get("name")
+    ]
+    if enabled_rule_sets:
+        providers = config.get("rule-providers", {})
+        if not isinstance(providers, dict):
+            providers = {}
+        for item in enabled_rule_sets:
+            providers[item["name"]] = rule_set_provider(item["name"], item.get("behavior", "classical"))
+        config["rule-providers"] = providers
     if mods.get("geo"):
         config["geodata-mode"] = mods["geo"].get("mode", True)
         for key in ("geodata-loader", "geo-auto-update", "geo-update-interval", "geox-url"):

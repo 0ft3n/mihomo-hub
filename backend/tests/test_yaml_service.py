@@ -12,6 +12,17 @@ def test_apply_modifications():
     assert out["rules"][0] == "DOMAIN,x.test,NL"
     assert out["dns"] == {"enable": True, "ipv6": False}
 
+def test_apply_modifications_adds_custom_rule_sets():
+    out = yaml.safe_load(apply_modifications(
+        SOURCE,
+        {"rules": ["RULE-SET,myset,Main"]},
+        [{"name": "myset", "behavior": "domain", "payload": "example.com", "enabled": True}],
+    ))
+    assert out["rule-providers"]["myset"]["type"] == "http"
+    assert out["rule-providers"]["myset"]["behavior"] == "domain"
+    assert out["rule-providers"]["myset"]["format"] == "text"
+    assert out["rule-providers"]["myset"]["url"].endswith("/rule-sets/myset.list")
+
 def test_summary():
     summary = summarize(yaml.safe_load(SOURCE))
     assert summary["proxy_names"] == ["NL"]

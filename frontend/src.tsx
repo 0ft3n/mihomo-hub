@@ -89,6 +89,12 @@ type DefaultProfile = {
   modifications: any;
   enabled: boolean;
 };
+type CustomRuleSet = {
+  name: string;
+  behavior: "classical" | "domain" | "ipcidr";
+  payload: string;
+  enabled: boolean;
+};
 function catalogFromYaml(text = "") {
   try {
     const parsed = parseYaml(text) || {};
@@ -146,6 +152,7 @@ async function api(path: string, options: any = {}) {
 function App() {
   const [authed, setAuthed] = useState(!!token());
   const [subs, setSubs] = useState<Sub[]>([]);
+  const [customRuleSets, setCustomRuleSets] = useState<CustomRuleSet[]>([]);
   const [active, setActive] = useState<number>();
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [admin, setAdmin] = useState(false);
@@ -164,10 +171,11 @@ function App() {
     localStorage.setItem("theme", theme);
   }, [theme]);
   const load = () =>
-    api("/subscriptions")
-      .then((x) => {
-        setSubs(x);
-        if (!active && x[0]) setActive(x[0].id);
+    Promise.all([api("/subscriptions"), api("/rule-sets")])
+      .then(([subscriptions, ruleSets]) => {
+        setSubs(subscriptions);
+        setCustomRuleSets(ruleSets);
+        if (!active && subscriptions[0]) setActive(subscriptions[0].id);
       })
       .catch(() => {
         localStorage.removeItem("token");
@@ -260,9 +268,14 @@ function App() {
           </div>
         </header>
         {admin ? (
-          <Admin key="admin" />
+          <Admin key="admin" onRuleSetsChange={setCustomRuleSets} />
         ) : sub ? (
-          <Subscription key={sub.id} sub={sub} reload={load} />
+          <Subscription
+            key={sub.id}
+            sub={sub}
+            reload={load}
+            customRuleSets={customRuleSets}
+          />
         ) : (
           <Empty />
         )}
@@ -566,7 +579,15 @@ function Welcome({
   );
 }
 
-function Subscription({ sub, reload }: { sub: Sub; reload: () => void }) {
+function Subscription({
+  sub,
+  reload,
+  customRuleSets,
+}: {
+  sub: Sub;
+  reload: () => void;
+  customRuleSets: CustomRuleSet[];
+}) {
   const [tab, setTab] = useState("overview");
   const [full, setFull] = useState<Sub>();
   const [edit, setEdit] = useState<Profile>();
@@ -600,6 +621,7 @@ function Subscription({ sub, reload }: { sub: Sub; reload: () => void }) {
         ]}
         ruleProviders={[
           ...new Set([
+            ...customRuleSets.map((ruleSet) => ruleSet.name),
             ...(data.source_meta.rule_provider_names || []),
             ...sourceCatalog.ruleProviders,
           ]),
@@ -1627,10 +1649,15 @@ function Editor({
   );
 }
 
-function Admin() {
+function Admin({
+  onRuleSetsChange,
+}: {
+  onRuleSetsChange: (ruleSets: CustomRuleSet[]) => void;
+}) {
   const [pass, setPass] = useState(sessionStorage.getItem("admin") || "");
   const [data, setData] = useState<any>();
   const [defaultProfiles, setDefaultProfiles] = useState<DefaultProfile[]>([]);
+  const [customRuleSets, setCustomRuleSets] = useState<CustomRuleSet[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<number>(0);
   const [editTemplate, setEditTemplate] = useState<number>();
   const [message, setMessage] = useState("");
@@ -1642,6 +1669,8 @@ function Admin() {
       sessionStorage.setItem("admin", pass);
       setData(x);
       setDefaultProfiles(x.default_profiles || []);
+      setCustomRuleSets(x.custom_rule_sets || []);
+      onRuleSetsChange(x.custom_rule_sets || []);
       setSelectedSourceId(x.subscriptions[0]?.id || 0);
     } catch (e: any) {
       alert(e.message);
@@ -1655,6 +1684,17 @@ function Admin() {
     });
     setDefaultProfiles(saved);
     setMessage("Шаблоны профилей сохранены");
+    return saved;
+  }
+  async function saveRuleSets(next: CustomRuleSet[]) {
+    const saved = await api("/admin/rule-sets", {
+      method: "PUT",
+      headers: { "X-Admin-Password": pass },
+      body: JSON.stringify(next),
+    });
+    setCustomRuleSets(saved);
+    onRuleSetsChange(saved);
+    setMessage("Rule sets сохранены");
     return saved;
   }
   const templateSource: Sub | undefined = data?.subscriptions.find(
@@ -1679,7 +1719,12 @@ function Admin() {
           }}
           proxies={templateCatalog.proxies}
           groups={templateCatalog.groups}
-          ruleProviders={templateCatalog.ruleProviders}
+          ruleProviders={[
+            ...new Set([
+              ...customRuleSets.map((ruleSet) => ruleSet.name),
+              ...templateCatalog.ruleProviders,
+            ]),
+          ]}
           sourceYaml={templateSource?.yaml || ""}
           templateMode
           back={() => setEditTemplate(undefined)}
@@ -1819,6 +1864,129 @@ function Admin() {
             ))}
           </div>
           {message && <div className="callout"><Check /><b>{message}</b></div>}
+        </section>
+        <section className="panel form ruleSetsPanel">
+          <div className="defaultProfilesHead">
+            <div>
+              <h3>Custom rule sets</h3>
+              <p className="hint">
+                Публикуются как rule-providers и доступны в билдере RULE-SET.
+              </p>
+            </div>
+            <button
+              className="primary"
+              onClick={() =>
+                saveRuleSets([
+                  ...customRuleSets,
+                  {
+                    name: `custom-${customRuleSets.length + 1}`,
+                    behavior: "classical",
+                    payload: "DOMAIN-SUFFIX,example.com\n",
+                    enabled: true,
+                  },
+                ])
+              }
+            >
+              <CirclePlus /> Добавить набор
+            </button>
+          </div>
+          <div className="ruleSetList">
+            {customRuleSets.map((ruleSet, index) => (
+              <article className="ruleSetCard" key={`${ruleSet.name}-${index}`}>
+                <div className="ruleSetHead">
+                  <label>
+                    <span>Имя</span>
+                    <input
+                      value={ruleSet.name}
+                      onChange={(e) => {
+                        const next = customRuleSets.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, name: e.target.value }
+                            : item,
+                        );
+                        setCustomRuleSets(next);
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span>Behavior</span>
+                    <SelectField
+                      value={ruleSet.behavior}
+                      onChange={(value) => {
+                        const next = customRuleSets.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? {
+                                ...item,
+                                behavior: value as CustomRuleSet["behavior"],
+                              }
+                            : item,
+                        );
+                        setCustomRuleSets(next);
+                      }}
+                      options={[
+                        { value: "classical", label: "classical" },
+                        { value: "domain", label: "domain" },
+                        { value: "ipcidr", label: "ipcidr" },
+                      ]}
+                    />
+                  </label>
+                  <label className="toggle compactToggle">
+                    <span>Включён</span>
+                    <input
+                      type="checkbox"
+                      checked={ruleSet.enabled}
+                      onChange={(e) => {
+                        const next = customRuleSets.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, enabled: e.target.checked }
+                            : item,
+                        );
+                        setCustomRuleSets(next);
+                      }}
+                    />
+                  </label>
+                </div>
+                <textarea
+                  value={ruleSet.payload}
+                  onChange={(e) => {
+                    const next = customRuleSets.map((item, itemIndex) =>
+                      itemIndex === index
+                        ? { ...item, payload: e.target.value }
+                        : item,
+                    );
+                    setCustomRuleSets(next);
+                  }}
+                  placeholder={"DOMAIN-SUFFIX,example.com\nGEOSITE,telegram"}
+                  spellCheck={false}
+                />
+                <div className="ruleSetActions">
+                  <code>/rule-sets/{encodeURIComponent(ruleSet.name)}.list</code>
+                  <button
+                    className="dangerButton"
+                    onClick={() =>
+                      saveRuleSets(
+                        customRuleSets.filter(
+                          (_, itemIndex) => itemIndex !== index,
+                        ),
+                      )
+                    }
+                  >
+                    <Trash2 /> Удалить
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+          <button
+            className="primary"
+            disabled={
+              new Set(customRuleSets.map((item) => item.name.trim())).size !==
+              customRuleSets.length
+            }
+            onClick={() => saveRuleSets(customRuleSets)}
+          >
+            <Save /> Сохранить rule sets
+          </button>
         </section>
       </div>
     </div>

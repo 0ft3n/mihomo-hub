@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .database import Base, engine, get_db
 from .models import Account, Profile, Setting, Subscription
-from .schemas import DefaultProfileTemplate, ImportRequest, LoginRequest, ProfileIn, ProfileUpdate, SubscriptionUpdate
+from .schemas import CustomRuleSet, DefaultProfileTemplate, ImportRequest, LoginRequest, ProfileIn, ProfileUpdate, SubscriptionUpdate
 from .security import current_account_id, make_session, require_admin
 from .yaml_service import apply_modifications, fetch_yaml, subscription_meta
 
@@ -58,6 +58,19 @@ def default_profile_templates(setting: Setting) -> list[dict]:
     if isinstance(templates, list) and templates:
         return deepcopy(templates)
     return [{"name": "Основной профиль", "modifications": deepcopy(stored), "enabled": True}]
+
+
+def custom_rule_sets(setting: Setting) -> list[dict]:
+    stored = setting.default_modifications or {}
+    rule_sets = stored.get("custom_rule_sets") if isinstance(stored, dict) else None
+    return deepcopy(rule_sets) if isinstance(rule_sets, list) else []
+
+
+def save_setting_section(setting: Setting, key: str, value):
+    stored = setting.default_modifications or {}
+    if not isinstance(stored, dict):
+        stored = {}
+    setting.default_modifications = {**stored, key: value}
 
 
 def add_default_profiles(db: Session, subscription_id: int):
@@ -115,6 +128,15 @@ def login_key(key: str, db: Session = Depends(get_db)):
 def subscriptions(account_id: int = Depends(current_account_id), db: Session = Depends(get_db)):
     rows = db.scalars(select(Subscription).where(Subscription.account_id == account_id).order_by(Subscription.id)).all()
     return [serialize_subscription(s) for s in rows]
+
+
+@app.get("/api/rule-sets")
+def list_rule_sets(account_id: int = Depends(current_account_id), db: Session = Depends(get_db)):
+    return [
+        {"name": item["name"], "behavior": item.get("behavior", "classical")}
+        for item in custom_rule_sets(db.get(Setting, 1))
+        if item.get("enabled", True) and item.get("name")
+    ]
 
 
 @app.post("/api/subscriptions")
@@ -221,7 +243,7 @@ async def public_subscription(slug: str, db: Session = Depends(get_db)):
         raw = sub.cached_yaml
         upstream_headers = sub.source_meta.get("response_headers", {})
     if not raw: raise HTTPException(502, "Источник подписки временно недоступен")
-    rendered = apply_modifications(raw, p.modifications)
+    rendered = apply_modifications(raw, p.modifications, custom_rule_sets(db.get(Setting, 1)))
     safe_filename = re.sub(r"[^A-Za-z0-9._-]+", "_", sub.name).strip("_") or "profile"
     encoded_title = base64.b64encode(sub.name.encode("utf-8")).decode("ascii")
     response_headers = {
@@ -235,18 +257,32 @@ async def public_subscription(slug: str, db: Session = Depends(get_db)):
     return Response(rendered, media_type="text/yaml; charset=utf-8", headers=response_headers)
 
 
+@app.get("/rule-sets/{name}.list")
+def public_rule_set(name: str, db: Session = Depends(get_db)):
+    target = unquote(name)
+    for item in custom_rule_sets(db.get(Setting, 1)):
+        if item.get("enabled", True) and item.get("name") == target:
+            payload = "\n".join(line.strip() for line in (item.get("payload") or "").splitlines() if line.strip() and not line.strip().startswith("#"))
+            return Response(payload + ("\n" if payload else ""), media_type="text/plain; charset=utf-8")
+    raise HTTPException(404, "Rule set не найден")
+
+
 @app.get("/api/admin/overview", dependencies=[Depends(require_admin)])
 def admin_overview(db: Session = Depends(get_db)):
     rows = db.scalars(select(Subscription).order_by(Subscription.created_at.desc())).all()
     setting = db.get(Setting, 1)
     return {"subscriptions": [serialize_subscription(s, True) for s in rows], "accounts": db.scalar(select(func.count(Account.id))),
             "profiles": db.scalar(select(func.count(Profile.id))), "defaults": setting.default_modifications,
-            "default_profiles": default_profile_templates(setting)}
+            "default_profiles": default_profile_templates(setting), "custom_rule_sets": custom_rule_sets(setting)}
 
 
 @app.put("/api/admin/defaults", dependencies=[Depends(require_admin)])
 def admin_defaults(modifications: dict, db: Session = Depends(get_db)):
-    setting = db.get(Setting, 1); setting.default_modifications = modifications; db.commit()
+    setting = db.get(Setting, 1)
+    for item in ("custom_rule_sets", "profile_templates"):
+        if item not in modifications and isinstance(setting.default_modifications, dict) and item in setting.default_modifications:
+            modifications[item] = setting.default_modifications[item]
+    setting.default_modifications = modifications; db.commit()
     return setting.default_modifications
 
 
@@ -256,6 +292,18 @@ def admin_default_profiles(templates: list[DefaultProfileTemplate], db: Session 
         raise HTTPException(422, "Должен остаться хотя бы один профиль по умолчанию")
     setting = db.get(Setting, 1)
     saved = [template.model_dump() for template in templates]
-    setting.default_modifications = {"profile_templates": saved}
+    save_setting_section(setting, "profile_templates", saved)
+    db.commit()
+    return saved
+
+
+@app.put("/api/admin/rule-sets", dependencies=[Depends(require_admin)])
+def admin_rule_sets(rule_sets: list[CustomRuleSet], db: Session = Depends(get_db)):
+    names = [item.name for item in rule_sets]
+    if len(names) != len(set(names)):
+        raise HTTPException(422, "Имена rule set должны быть уникальными")
+    saved = [item.model_dump() for item in rule_sets]
+    setting = db.get(Setting, 1)
+    save_setting_section(setting, "custom_rule_sets", saved)
     db.commit()
     return saved
