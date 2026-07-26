@@ -583,21 +583,33 @@ function Subscription({
   sub,
   reload,
   customRuleSets,
+  adminPassword,
+  backToAdmin,
 }: {
   sub: Sub;
-  reload: () => void;
+  reload: () => void | Promise<void>;
   customRuleSets: CustomRuleSet[];
+  adminPassword?: string;
+  backToAdmin?: () => void;
 }) {
   const [tab, setTab] = useState("overview");
   const [full, setFull] = useState<Sub>();
   const [edit, setEdit] = useState<Profile>();
   const [renaming, setRenaming] = useState(false);
   const [subscriptionName, setSubscriptionName] = useState(sub.name);
+  const request = (path: string, options: any = {}) =>
+    api(`${adminPassword ? "/admin" : ""}${path}`, {
+      ...options,
+      headers: {
+        ...options.headers,
+        ...(adminPassword ? { "X-Admin-Password": adminPassword } : {}),
+      },
+    });
   useEffect(() => {
-    api(`/subscriptions/${sub.id}`).then(setFull);
+    request(`/subscriptions/${sub.id}`).then(setFull);
     setSubscriptionName(sub.name);
     setRenaming(false);
-  }, [sub.id]);
+  }, [sub.id, adminPassword]);
   const data = full || sub;
   const sourceCatalog = useMemo(
     () => catalogFromYaml(data.yaml || ""),
@@ -628,15 +640,30 @@ function Subscription({
         ]}
         sourceYaml={data.yaml || ""}
         back={() => setEdit(undefined)}
+        saveProfile={
+          adminPassword
+            ? async (updated) => {
+                await request(`/profiles/${edit.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify(updated),
+                });
+              }
+            : undefined
+        }
         saved={() => {
           setEdit(undefined);
           reload();
-          api(`/subscriptions/${sub.id}`).then(setFull);
+          request(`/subscriptions/${sub.id}`).then(setFull);
         }}
       />
     );
   return (
     <div className="page">
+      {backToAdmin && (
+        <button className="back adminBack" onClick={backToAdmin}>
+          ← Назад ко всем подпискам
+        </button>
+      )}
       <div className="tabs">
         <button
           className={tab === "overview" ? "on" : ""}
@@ -707,7 +734,7 @@ function Subscription({
                     className="resetName"
                     title="Вернуть название из исходной подписки"
                     onClick={async () => {
-                      const updated = await api(
+                      const updated = await request(
                         `/subscriptions/${sub.id}/reset-name`,
                         { method: "POST" },
                       );
@@ -731,7 +758,7 @@ function Subscription({
                     className="primary"
                     disabled={!subscriptionName.trim()}
                     onClick={async () => {
-                      const updated = await api(`/subscriptions/${sub.id}`, {
+                      const updated = await request(`/subscriptions/${sub.id}`, {
                         method: "PATCH",
                         body: JSON.stringify({ name: subscriptionName.trim() }),
                       });
@@ -750,7 +777,7 @@ function Subscription({
               )}
               <button
                 onClick={async () => {
-                  const refreshed = await api(
+                  const refreshed = await request(
                     `/subscriptions/${sub.id}/refresh`,
                     { method: "POST" },
                   );
@@ -771,14 +798,16 @@ function Subscription({
             <button
               className="primary"
               onClick={async () => {
-                const p = await api(`/subscriptions/${sub.id}/profiles`, {
+                const p = await request(`/subscriptions/${sub.id}/profiles`, {
                   method: "POST",
                   body: JSON.stringify({
-                    name: `Новый профиль ${sub.profiles.length + 1}`,
+                    name: `Новый профиль ${data.profiles.length + 1}`,
                     modifications: { rules: [], overrides: {} },
                   }),
                 });
-                reload();
+                await reload();
+                const updated = await request(`/subscriptions/${sub.id}`);
+                setFull(updated);
                 setEdit(p);
               }}
             >
@@ -787,7 +816,7 @@ function Subscription({
             </button>
           </div>
           <div className="cards">
-            {sub.profiles.map((p) => (
+            {data.profiles.map((p) => (
               <article className="profile" key={p.id}>
                 <div className="profileTop">
                   <span className="device">
@@ -1661,6 +1690,7 @@ function Admin({
   const [customRuleSetIds, setCustomRuleSetIds] = useState<string[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<number>(0);
   const [editTemplate, setEditTemplate] = useState<number>();
+  const [editSubscriptionId, setEditSubscriptionId] = useState<number>();
   const [message, setMessage] = useState("");
   async function load() {
     try {
@@ -1673,7 +1703,8 @@ function Admin({
       setCustomRuleSets(x.custom_rule_sets || []);
       setCustomRuleSetIds((x.custom_rule_sets || []).map(() => newRuleId()));
       onRuleSetsChange(x.custom_rule_sets || []);
-      setSelectedSourceId(x.subscriptions[0]?.id || 0);
+      setSelectedSourceId((current) => current || x.subscriptions[0]?.id || 0);
+      return x;
     } catch (e: any) {
       alert(e.message);
     }
@@ -1709,6 +1740,21 @@ function Admin({
     () => catalogFromYaml(templateSource?.yaml || ""),
     [templateSource?.yaml],
   );
+  if (data && editSubscriptionId !== undefined) {
+    const subscription = data.subscriptions.find(
+      (item: Sub) => item.id === editSubscriptionId,
+    );
+    if (subscription)
+      return (
+        <Subscription
+          sub={subscription}
+          reload={load}
+          customRuleSets={customRuleSets}
+          adminPassword={pass}
+          backToAdmin={() => setEditSubscriptionId(undefined)}
+        />
+      );
+  }
   if (data && editTemplate !== undefined) {
     const template = defaultProfiles[editTemplate];
     if (template)
@@ -1782,6 +1828,12 @@ function Admin({
               </div>
               <div className="adminSubscriptionActions">
                 <span>{s.source_meta.proxy_count} узлов</span>
+                <button
+                  className="adminManageButton"
+                  onClick={() => setEditSubscriptionId(s.id)}
+                >
+                  <Settings /> Управлять
+                </button>
                 <button
                   onClick={async () => {
                     const templates = s.profiles.map((profile) => ({

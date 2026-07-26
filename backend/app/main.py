@@ -276,6 +276,95 @@ def admin_overview(db: Session = Depends(get_db)):
             "default_profiles": default_profile_templates(setting), "custom_rule_sets": custom_rule_sets(setting)}
 
 
+def admin_subscription(db: Session, sub_id: int):
+    sub = db.get(Subscription, sub_id)
+    if not sub:
+        raise HTTPException(404, "Подписка не найдена")
+    return sub
+
+
+def admin_profile(db: Session, profile_id: int):
+    profile = db.get(Profile, profile_id)
+    if not profile:
+        raise HTTPException(404, "Профиль не найден")
+    return profile
+
+
+@app.get("/api/admin/subscriptions/{sub_id}", dependencies=[Depends(require_admin)])
+def admin_get_subscription(sub_id: int, db: Session = Depends(get_db)):
+    return serialize_subscription(admin_subscription(db, sub_id), True)
+
+
+@app.patch("/api/admin/subscriptions/{sub_id}", dependencies=[Depends(require_admin)])
+def admin_update_subscription(sub_id: int, body: SubscriptionUpdate, db: Session = Depends(get_db)):
+    sub = admin_subscription(db, sub_id)
+    changes = body.model_dump(exclude_none=True)
+    for key, value in changes.items():
+        setattr(sub, key, value)
+    if "name" in changes:
+        sub.source_meta = {**sub.source_meta, "name_overridden": True}
+    db.commit()
+    return serialize_subscription(sub)
+
+
+@app.post("/api/admin/subscriptions/{sub_id}/reset-name", dependencies=[Depends(require_admin)])
+def admin_reset_subscription_name(sub_id: int, db: Session = Depends(get_db)):
+    sub = admin_subscription(db, sub_id)
+    meta = dict(sub.source_meta)
+    meta.pop("name_overridden", None)
+    sub.source_meta = meta
+    sub.name = meta.get("provider_name") or name_from_url(sub.source_url)
+    db.commit()
+    return serialize_subscription(sub)
+
+
+@app.post("/api/admin/subscriptions/{sub_id}/refresh", dependencies=[Depends(require_admin)])
+async def admin_refresh_subscription(sub_id: int, db: Session = Depends(get_db)):
+    sub = admin_subscription(db, sub_id)
+    raw, parsed, headers = await fetch_yaml(sub.source_url)
+    old_meta = sub.source_meta
+    sub.cached_yaml = raw
+    sub.source_meta = subscription_meta(parsed, headers, old_meta)
+    if not old_meta.get("name_overridden") and sub.source_meta.get("provider_name"):
+        sub.name = sub.source_meta["provider_name"]
+    sub.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return serialize_subscription(sub, True)
+
+
+@app.post("/api/admin/subscriptions/{sub_id}/profiles", dependencies=[Depends(require_admin)])
+def admin_create_profile(sub_id: int, body: ProfileIn, db: Session = Depends(get_db)):
+    admin_subscription(db, sub_id)
+    profile = Profile(subscription_id=sub_id, name=body.name, modifications=body.modifications)
+    db.add(profile)
+    db.commit()
+    return serialize_profile(profile)
+
+
+@app.patch("/api/admin/profiles/{profile_id}", dependencies=[Depends(require_admin)])
+def admin_update_profile(profile_id: int, body: ProfileUpdate, db: Session = Depends(get_db)):
+    profile = admin_profile(db, profile_id)
+    for key, value in body.model_dump(exclude_none=True).items():
+        setattr(profile, key, value)
+    db.commit()
+    return serialize_profile(profile)
+
+
+@app.delete("/api/admin/profiles/{profile_id}", status_code=204, dependencies=[Depends(require_admin)])
+def admin_delete_profile(profile_id: int, db: Session = Depends(get_db)):
+    profile = admin_profile(db, profile_id)
+    db.delete(profile)
+    db.commit()
+
+
+@app.post("/api/admin/profiles/{profile_id}/rotate", dependencies=[Depends(require_admin)])
+def admin_rotate_profile(profile_id: int, db: Session = Depends(get_db)):
+    profile = admin_profile(db, profile_id)
+    profile.slug = secrets.token_urlsafe(32)
+    db.commit()
+    return serialize_profile(profile)
+
+
 @app.put("/api/admin/defaults", dependencies=[Depends(require_admin)])
 def admin_defaults(modifications: dict, db: Session = Depends(get_db)):
     setting = db.get(Setting, 1)
