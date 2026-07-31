@@ -112,6 +112,7 @@ const defaultCustomProxy = (): CustomProxyEntry => ({
     network: "tcp",
     udp: true,
     "packet-encoding": "xudp",
+    encryption: "",
     tls: true,
     servername: "",
     flow: "xtls-rprx-vision",
@@ -213,7 +214,11 @@ function App() {
       .then(([subscriptions, ruleSets]) => {
         setSubs(subscriptions);
         setCustomRuleSets(ruleSets);
-        if (!active && subscriptions[0]) setActive(subscriptions[0].id);
+        setActive((current) =>
+          subscriptions.some((subscription: Sub) => subscription.id === current)
+            ? current
+            : subscriptions[0]?.id,
+        );
       })
       .catch(() => {
         localStorage.removeItem("token");
@@ -635,6 +640,9 @@ function Subscription({
   const [edit, setEdit] = useState<Profile>();
   const [renaming, setRenaming] = useState(false);
   const [subscriptionName, setSubscriptionName] = useState(sub.name);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const request = (path: string, options: any = {}) =>
     api(`${adminPassword ? "/admin" : ""}${path}`, {
       ...options,
@@ -826,6 +834,15 @@ function Subscription({
               >
                 <RefreshCw /> Обновить
               </button>
+              <button
+                className="dangerButton"
+                onClick={() => {
+                  setDeleteError("");
+                  setDeleteOpen(true);
+                }}
+              >
+                <Trash2 /> Удалить
+              </button>
             </div>
           </section>
           <div className="sectionTitle">
@@ -888,6 +905,73 @@ function Subscription({
               </article>
             ))}
           </div>
+          {deleteOpen && createPortal(
+            <div
+              className="modalBackdrop"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget && !deleting)
+                  setDeleteOpen(false);
+              }}
+            >
+              <div
+                className="subscriptionModal deleteSubscriptionModal"
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="delete-subscription-title"
+              >
+                <button
+                  type="button"
+                  className="modalClose"
+                  aria-label="Закрыть"
+                  disabled={deleting}
+                  onClick={() => setDeleteOpen(false)}
+                >
+                  <X />
+                </button>
+                <div className="modalIcon dangerModalIcon">
+                  <Trash2 />
+                </div>
+                <h2 id="delete-subscription-title">Удалить подписку?</h2>
+                <p>
+                  Подписка <b>«{data.name}»</b>, все её профили и выданные
+                  публичные ссылки будут удалены без возможности восстановления.
+                </p>
+                {deleteError && <div className="error modalError">{deleteError}</div>}
+                <div className="modalActions">
+                  <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={() => setDeleteOpen(false)}
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    className="deleteConfirmButton"
+                    disabled={deleting}
+                    onClick={async () => {
+                      setDeleting(true);
+                      setDeleteError("");
+                      try {
+                        await request(`/subscriptions/${sub.id}`, { method: "DELETE" });
+                        setDeleteOpen(false);
+                        await reload();
+                        backToAdmin?.();
+                      } catch (error: any) {
+                        setDeleteError(error.message);
+                      } finally {
+                        setDeleting(false);
+                      }
+                    }}
+                  >
+                    {deleting ? <RefreshCw className="spin" /> : <Trash2 />}
+                    {deleting ? "Удаляем..." : "Удалить подписку"}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )}
         </>
       )}
     </div>
@@ -1042,6 +1126,7 @@ function proxyForType(type: string, current: Record<string, any>) {
     uuid: "",
     network: "tcp",
     "packet-encoding": "xudp",
+    encryption: "",
     tls: true,
     servername: "",
     flow: "xtls-rprx-vision",
@@ -1074,6 +1159,7 @@ function proxyFromShareLink(raw: string): Record<string, any> {
     const proxy: Record<string, any> = {
       name, type: "vless", server, port, uuid: decodeURIComponent(url.username),
       network, udp: true, "packet-encoding": query.get("packetEncoding") || "xudp",
+      encryption: query.get("encryption") || "",
       tls: security !== "none", servername: query.get("sni") || "",
       flow: query.get("flow") || "", "client-fingerprint": query.get("fp") || "chrome",
       ...transport,
@@ -1166,6 +1252,7 @@ function CustomProxyModal({
         if (!cleaned.servername) delete cleaned.servername;
         if (!cleaned.sni) delete cleaned.sni;
         if (!cleaned.flow) delete cleaned.flow;
+        if (!cleaned.encryption) delete cleaned.encryption;
         if (!cleaned.obfs) {
           delete cleaned.obfs;
           delete cleaned["obfs-password"];
@@ -1225,6 +1312,7 @@ function CustomProxyModal({
             {type === "vless" && <>
               <label><span>Flow</span><input value={proxy.flow || ""} onChange={(e) => setProxy({ flow: e.target.value })} placeholder="xtls-rprx-vision" /></label>
               <label><span>Fingerprint</span><SelectField value={proxy["client-fingerprint"] || "chrome"} onChange={(value) => setProxy({ "client-fingerprint": value })} options={["chrome", "firefox", "safari", "edge", "qq", "randomized"].map((value) => ({ value, label: value }))} /></label>
+              <label className="proxyWideField"><span>VLESS Encryption</span><input value={proxy.encryption || ""} onChange={(e) => setProxy({ encryption: e.target.value })} placeholder="none или mlkem768x25519plus..." /></label>
               <label className="proxyWideField"><span>Reality Public Key</span><input value={proxy["reality-opts"]?.["public-key"] || ""} onChange={(e) => setReality({ "public-key": e.target.value })} /></label>
               <label className="proxyWideField"><span>Reality Short ID</span><input value={proxy["reality-opts"]?.["short-id"] || ""} onChange={(e) => setReality({ "short-id": e.target.value })} /></label>
             </>}

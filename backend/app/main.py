@@ -175,6 +175,13 @@ def update_subscription(sub_id: int, body: SubscriptionUpdate, account_id: int =
     db.commit(); return serialize_subscription(sub)
 
 
+@app.delete("/api/subscriptions/{sub_id}", status_code=204)
+def delete_subscription(sub_id: int, account_id: int = Depends(current_account_id), db: Session = Depends(get_db)):
+    sub = owned_subscription(db, sub_id, account_id)
+    db.delete(sub)
+    db.commit()
+
+
 @app.post("/api/subscriptions/{sub_id}/reset-name")
 def reset_subscription_name(sub_id: int, account_id: int = Depends(current_account_id), db: Session = Depends(get_db)):
     sub = owned_subscription(db, sub_id, account_id)
@@ -305,6 +312,13 @@ def admin_update_subscription(sub_id: int, body: SubscriptionUpdate, db: Session
         sub.source_meta = {**sub.source_meta, "name_overridden": True}
     db.commit()
     return serialize_subscription(sub)
+
+
+@app.delete("/api/admin/subscriptions/{sub_id}", status_code=204, dependencies=[Depends(require_admin)])
+def admin_delete_subscription(sub_id: int, db: Session = Depends(get_db)):
+    sub = admin_subscription(db, sub_id)
+    db.delete(sub)
+    db.commit()
 
 
 @app.post("/api/admin/subscriptions/{sub_id}/reset-name", dependencies=[Depends(require_admin)])
