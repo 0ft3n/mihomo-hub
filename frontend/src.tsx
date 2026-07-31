@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { createRoot } from "react-dom/client";
+import { createPortal } from "react-dom";
 import {
   Activity,
   ArrowDownToLine,
@@ -1106,6 +1107,13 @@ function CustomProxyModal({
   const [yamlText, setYamlText] = useState("");
   const [shareLink, setShareLink] = useState("");
   const [error, setError] = useState("");
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
   const proxy = entry.proxy;
   const setProxy = (patch: Record<string, any>) =>
     setEntry((current) => ({ ...current, proxy: { ...current.proxy, ...patch } }));
@@ -1173,7 +1181,7 @@ function CustomProxyModal({
   const type = String(proxy.type || "vless");
   const supportsNetwork = ["vless", "trojan", "vmess"].includes(type);
   const supportsTls = ["vless", "trojan", "vmess"].includes(type);
-  return (
+  return createPortal(
     <div className="modalBackdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="subscriptionModal customProxyModal">
         <button className="modalClose" aria-label="Закрыть" onClick={close}><X /></button>
@@ -1230,7 +1238,8 @@ function CustomProxyModal({
         {error && <div className="error modalError">{error}</div>}
         <div className="modalActions"><button onClick={close}>Отмена</button><button className="primary" onClick={submit}><Save /> Сохранить сервер</button></div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
