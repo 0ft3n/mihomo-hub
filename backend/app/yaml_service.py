@@ -107,6 +107,38 @@ def apply_modifications(source: str, mods: dict, custom_rule_sets: list[dict] | 
     groups = mods.get("proxy_groups")
     if isinstance(groups, list) and groups:
         config["proxy-groups"] = groups
+    custom_proxy_entries = mods.get("custom_proxies", [])
+    if isinstance(custom_proxy_entries, list) and custom_proxy_entries:
+        proxies = config.get("proxies", [])
+        if not isinstance(proxies, list):
+            proxies = []
+        memberships: dict[str, list[str]] = {}
+        for entry in custom_proxy_entries:
+            if not isinstance(entry, dict):
+                continue
+            proxy = entry.get("proxy", entry)
+            groups_for_proxy = entry.get("groups", [])
+            if not isinstance(proxy, dict) or not proxy.get("name") or not proxy.get("type"):
+                continue
+            proxy = deepcopy(proxy)
+            name = str(proxy["name"])
+            proxies = [item for item in proxies if not isinstance(item, dict) or item.get("name") != name]
+            proxies.append(proxy)
+            if isinstance(groups_for_proxy, list):
+                memberships[name] = [str(group) for group in groups_for_proxy if group]
+        config["proxies"] = proxies
+        configured_groups = config.get("proxy-groups", [])
+        if isinstance(configured_groups, list):
+            for group in configured_groups:
+                if not isinstance(group, dict) or not group.get("name"):
+                    continue
+                additions = [name for name, selected in memberships.items() if group["name"] in selected]
+                if not additions:
+                    continue
+                current = group.get("proxies", [])
+                if not isinstance(current, list):
+                    current = []
+                group["proxies"] = list(dict.fromkeys([*current, *additions]))
     return yaml.safe_dump(config, allow_unicode=True, sort_keys=False, width=160)
 
 

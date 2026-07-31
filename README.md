@@ -7,6 +7,7 @@ Self-hosted веб-панель для импорта Clash.Meta/Mihomo-подп
 - вход по исходной ссылке подписки и восстановление по ключу кабинета;
 - несколько upstream-подписок и несколько профилей у каждой;
 - правила маршрутизации, GeoData, deep-merge YAML и замена proxy-groups;
+- собственные VLESS, Trojan, Shadowsocks, Hysteria2 и VMess-серверы внутри отдельных профилей;
 - обновление upstream при запросе с fallback на последний валидный YAML;
 - случайные публичные URL с возможностью ротации;
 - админ-панель и настраиваемые шаблоны профилей для новых подписок;
@@ -28,7 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/0ft3n/mihomo-hub/main/install.sh | 
 
 ## Модификаторы
 
-Профиль хранит `rules`, `rules_mode` (`prepend`/`replace`), `geo`, `overrides` и опционально `proxy_groups`. `overrides` рекурсивно объединяется с upstream; `null` удаляет ключ. Секреты upstream никогда не возвращаются в админском списке, но доступны владельцу в просмотре исходного YAML.
+Профиль хранит `rules`, `rules_mode` (`prepend`/`replace`), `geo`, `overrides`, `custom_proxies` и опционально `proxy_groups`. `overrides` рекурсивно объединяется с upstream; `null` удаляет ключ. Собственные прокси можно заполнить через конструктор, импортировать из `vless://`, `trojan://` или `hysteria2://` ссылки либо отредактировать как YAML. Секреты upstream доступны владельцу подписки и администратору при управлении ею.
 
 ## Безопасность
 

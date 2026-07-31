@@ -95,6 +95,43 @@ type CustomRuleSet = {
   payload: string;
   enabled: boolean;
 };
+type CustomProxyEntry = {
+  id: string;
+  proxy: Record<string, any>;
+  groups: string[];
+};
+const defaultCustomProxy = (): CustomProxyEntry => ({
+  id: newRuleId(),
+  proxy: {
+    name: "Новый сервер",
+    type: "vless",
+    server: "",
+    port: 443,
+    uuid: "",
+    network: "tcp",
+    udp: true,
+    "packet-encoding": "xudp",
+    tls: true,
+    servername: "",
+    flow: "xtls-rprx-vision",
+    "client-fingerprint": "chrome",
+    "reality-opts": { "public-key": "", "short-id": "" },
+  },
+  groups: [],
+});
+function normalizeCustomProxies(value: unknown): CustomProxyEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry: any) => {
+    if (!entry || typeof entry !== "object") return [];
+    const proxy = entry.proxy && typeof entry.proxy === "object" ? entry.proxy : entry;
+    if (!proxy.name || !proxy.type) return [];
+    return [{
+      id: newRuleId(),
+      proxy: structuredClone(proxy),
+      groups: Array.isArray(entry.groups) ? [...entry.groups] : [],
+    }];
+  });
+}
 function catalogFromYaml(text = "") {
   try {
     const parsed = parseYaml(text) || {};
@@ -830,7 +867,7 @@ function Subscription({
                 <p>
                   {(p.modifications.rules || []).length} правил ·{" "}
                   {Object.keys(p.modifications.overrides || {}).length}{" "}
-                  переопределений
+                  переопределений · {(p.modifications.custom_proxies || []).length} своих серверов
                 </p>
                 <div className="link">
                   <code>{p.url}</code>
@@ -983,6 +1020,220 @@ function Empty() {
   );
 }
 
+function proxyForType(type: string, current: Record<string, any>) {
+  const common = {
+    name: current.name || "Новый сервер",
+    type,
+    server: current.server || "",
+    port: Number(current.port) || 443,
+    udp: current.udp ?? true,
+  };
+  if (type === "trojan")
+    return { ...common, password: "", network: "tcp", tls: true, sni: "", "client-fingerprint": "chrome" };
+  if (type === "ss")
+    return { ...common, cipher: "chacha20-ietf-poly1305", password: "" };
+  if (type === "hysteria2")
+    return { ...common, password: "", sni: "", obfs: "", "obfs-password": "" };
+  if (type === "vmess")
+    return { ...common, uuid: "", alterId: 0, cipher: "auto", network: "tcp", tls: true, servername: "" };
+  return {
+    ...common,
+    uuid: "",
+    network: "tcp",
+    "packet-encoding": "xudp",
+    tls: true,
+    servername: "",
+    flow: "xtls-rprx-vision",
+    "client-fingerprint": "chrome",
+    "reality-opts": { "public-key": "", "short-id": "" },
+  };
+}
+
+function proxyFromShareLink(raw: string): Record<string, any> {
+  const url = new URL(raw.trim());
+  const scheme = url.protocol.replace(":", "").toLowerCase();
+  const name = decodeURIComponent(url.hash.slice(1)) || "Импортированный сервер";
+  const server = url.hostname;
+  const port = Number(url.port);
+  if (!server || !port) throw new Error("В ссылке отсутствует сервер или порт");
+  const query = url.searchParams;
+  const network = query.get("type") || "tcp";
+  const transport: Record<string, any> = {};
+  if (network === "grpc")
+    transport["grpc-opts"] = { "grpc-service-name": query.get("serviceName") || "" };
+  if (network === "ws")
+    transport["ws-opts"] = {
+      path: query.get("path") || "/",
+      headers: query.get("host") ? { Host: query.get("host") } : {},
+    };
+  if (network === "xhttp")
+    transport["xhttp-opts"] = { path: query.get("path") || "/", host: query.get("host") || "" };
+  if (scheme === "vless") {
+    const security = query.get("security") || "none";
+    const proxy: Record<string, any> = {
+      name, type: "vless", server, port, uuid: decodeURIComponent(url.username),
+      network, udp: true, "packet-encoding": query.get("packetEncoding") || "xudp",
+      tls: security !== "none", servername: query.get("sni") || "",
+      flow: query.get("flow") || "", "client-fingerprint": query.get("fp") || "chrome",
+      ...transport,
+    };
+    if (security === "reality")
+      proxy["reality-opts"] = { "public-key": query.get("pbk") || "", "short-id": query.get("sid") || "" };
+    return proxy;
+  }
+  if (scheme === "trojan")
+    return { name, type: "trojan", server, port, password: decodeURIComponent(url.username), network, udp: true, tls: true, sni: query.get("sni") || query.get("peer") || "", "client-fingerprint": query.get("fp") || "chrome", ...transport };
+  if (["hysteria2", "hy2"].includes(scheme))
+    return { name, type: "hysteria2", server, port, password: decodeURIComponent(url.username), udp: true, sni: query.get("sni") || "", obfs: query.get("obfs") || "", "obfs-password": query.get("obfs-password") || query.get("obfsParam") || "" };
+  throw new Error("Поддерживается импорт ссылок vless://, trojan:// и hysteria2://");
+}
+
+function CustomProxyModal({
+  initial,
+  availableGroups,
+  existingNames,
+  close,
+  save,
+}: {
+  initial: CustomProxyEntry;
+  availableGroups: string[];
+  existingNames: string[];
+  close: () => void;
+  save: (entry: CustomProxyEntry) => void;
+}) {
+  const [entry, setEntry] = useState<CustomProxyEntry>(() => structuredClone(initial));
+  const [mode, setMode] = useState<"builder" | "yaml">("builder");
+  const [yamlText, setYamlText] = useState("");
+  const [shareLink, setShareLink] = useState("");
+  const [error, setError] = useState("");
+  const proxy = entry.proxy;
+  const setProxy = (patch: Record<string, any>) =>
+    setEntry((current) => ({ ...current, proxy: { ...current.proxy, ...patch } }));
+  const setReality = (patch: Record<string, any>) =>
+    setProxy({ "reality-opts": { ...(proxy["reality-opts"] || {}), ...patch } });
+  function switchMode(next: "builder" | "yaml") {
+    if (next === mode) return;
+    if (next === "yaml") {
+      setYamlText(stringifyYaml(proxy, { lineWidth: 120 }));
+      setMode("yaml");
+      setError("");
+      return;
+    }
+    try {
+      const parsed = parseYaml(yamlText);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+        throw new Error("Конфигурация прокси должна быть YAML-объектом");
+      setEntry((current) => ({ ...current, proxy: parsed as Record<string, any> }));
+      setMode("builder");
+      setError("");
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+  function submit() {
+    try {
+      let result = entry;
+      if (mode === "yaml") {
+        const parsed = parseYaml(yamlText);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+          throw new Error("Конфигурация прокси должна быть YAML-объектом");
+        result = { ...entry, proxy: parsed as Record<string, any> };
+      }
+      const candidate = result.proxy;
+      if (!String(candidate.name || "").trim()) throw new Error("Укажите название сервера");
+      if (!String(candidate.type || "").trim()) throw new Error("Укажите тип прокси");
+      if (!String(candidate.server || "").trim()) throw new Error("Укажите IP-адрес или домен сервера");
+      const port = Number(candidate.port);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Порт должен быть числом от 1 до 65535");
+      const proxyType = String(candidate.type).toLowerCase();
+      if (["vless", "vmess"].includes(proxyType) && !String(candidate.uuid || "").trim())
+        throw new Error("Для VLESS/VMess необходимо указать UUID");
+      if (["trojan", "ss", "hysteria2"].includes(proxyType) && !String(candidate.password || ""))
+        throw new Error("Для выбранного протокола необходимо указать пароль");
+      const name = String(candidate.name).trim();
+      if (existingNames.some((item) => item === name && name !== initial.proxy.name))
+        throw new Error("Прокси с таким названием уже существует");
+      const cleaned: Record<string, any> = { ...candidate, name, port };
+      if (mode === "builder") {
+        if (!cleaned.servername) delete cleaned.servername;
+        if (!cleaned.sni) delete cleaned.sni;
+        if (!cleaned.flow) delete cleaned.flow;
+        if (!cleaned.obfs) {
+          delete cleaned.obfs;
+          delete cleaned["obfs-password"];
+        }
+        if (cleaned["reality-opts"] && !cleaned["reality-opts"]["public-key"])
+          delete cleaned["reality-opts"];
+      }
+      save({ ...result, proxy: cleaned });
+    } catch (e: any) {
+      setError(e.message || "Проверьте параметры сервера");
+    }
+  }
+  const type = String(proxy.type || "vless");
+  const supportsNetwork = ["vless", "trojan", "vmess"].includes(type);
+  const supportsTls = ["vless", "trojan", "vmess"].includes(type);
+  return (
+    <div className="modalBackdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div className="subscriptionModal customProxyModal">
+        <button className="modalClose" aria-label="Закрыть" onClick={close}><X /></button>
+        <div className="modalIcon"><Server /></div>
+        <h2>{initial.proxy.server ? "Настройка сервера" : "Новый прокси-сервер"}</h2>
+        <p>Параметры попадут в секцию <code>proxies</code> итоговой подписки.</p>
+        <div className="composerTabs proxyModeTabs">
+          <button className={mode === "builder" ? "active" : ""} onClick={() => switchMode("builder")}><Settings /> Конструктор</button>
+          <button className={mode === "yaml" ? "active" : ""} onClick={() => switchMode("yaml")}><Code2 /> YAML</button>
+        </div>
+        {mode === "yaml" ? (
+          <div className="customProxyYaml">
+            <MonacoEditor
+              height="390px"
+              language="yaml"
+              theme={document.documentElement.dataset.theme === "light" ? "light" : "vs-dark"}
+              value={yamlText}
+              onChange={(value) => setYamlText(value || "")}
+              options={{ minimap: { enabled: false }, fontSize: 13, lineHeight: 21, tabSize: 2, automaticLayout: true, scrollBeyondLastLine: false }}
+            />
+          </div>
+        ) : (
+          <div className="customProxyForm">
+            <div className="proxyImportField">
+              <span>Быстрый импорт ссылки подключения</span>
+              <div><input value={shareLink} onChange={(e) => setShareLink(e.target.value)} placeholder="vless://, trojan:// или hysteria2://" /><button onClick={() => { try { setEntry((current) => ({ ...current, proxy: proxyFromShareLink(shareLink) })); setShareLink(""); setError(""); } catch (e: any) { setError(e.message); } }}><ArrowDownToLine /> Импортировать</button></div>
+            </div>
+            <label><span>Название</span><input value={proxy.name || ""} onChange={(e) => setProxy({ name: e.target.value })} placeholder="Мой Reality" /></label>
+            <label><span>Протокол</span><SelectField value={type} onChange={(value) => setEntry((current) => ({ ...current, proxy: proxyForType(value, current.proxy) }))} options={["vless", "trojan", "ss", "hysteria2", "vmess"].map((value) => ({ value, label: value.toUpperCase() }))} /></label>
+            <label className="proxyServerField"><span>Сервер</span><input value={proxy.server || ""} onChange={(e) => setProxy({ server: e.target.value })} placeholder="vpn.example.com или 203.0.113.10" /></label>
+            <label><span>Порт</span><input type="number" min="1" max="65535" value={proxy.port || ""} onChange={(e) => setProxy({ port: Number(e.target.value) })} /></label>
+            {supportsNetwork && <label><span>Транспорт</span><SelectField value={proxy.network || "tcp"} onChange={(value) => setProxy({ network: value })} options={["tcp", "grpc", "ws", "xhttp"].map((value) => ({ value, label: value.toUpperCase() }))} /></label>}
+            {(type === "vless" || type === "vmess") && <label className="proxyWideField"><span>UUID</span><input value={proxy.uuid || ""} onChange={(e) => setProxy({ uuid: e.target.value })} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></label>}
+            {(type === "trojan" || type === "ss" || type === "hysteria2") && <label className="proxyWideField"><span>Пароль</span><input type="password" value={proxy.password || ""} onChange={(e) => setProxy({ password: e.target.value })} /></label>}
+            {type === "ss" && <label className="proxyWideField"><span>Шифр</span><SelectField value={proxy.cipher || "chacha20-ietf-poly1305"} onChange={(value) => setProxy({ cipher: value })} options={["chacha20-ietf-poly1305", "aes-128-gcm", "aes-256-gcm", "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm"].map((value) => ({ value, label: value }))} /></label>}
+            {supportsTls && <label className="toggle compactToggle proxyToggle"><span>TLS</span><input type="checkbox" checked={proxy.tls ?? true} onChange={(e) => setProxy({ tls: e.target.checked })} /></label>}
+            <label className="toggle compactToggle proxyToggle"><span>UDP</span><input type="checkbox" checked={proxy.udp ?? true} onChange={(e) => setProxy({ udp: e.target.checked })} /></label>
+            {(type === "vless" || type === "vmess") && <label className="proxyWideField"><span>SNI / Server Name</span><input value={proxy.servername || ""} onChange={(e) => setProxy({ servername: e.target.value })} placeholder="www.example.com" /></label>}
+            {type === "trojan" && <label className="proxyWideField"><span>SNI</span><input value={proxy.sni || ""} onChange={(e) => setProxy({ sni: e.target.value })} /></label>}
+            {type === "hysteria2" && <><label><span>SNI</span><input value={proxy.sni || ""} onChange={(e) => setProxy({ sni: e.target.value })} /></label><label><span>Obfuscation</span><SelectField value={proxy.obfs || ""} onChange={(value) => setProxy({ obfs: value, "obfs-password": value ? proxy["obfs-password"] || "" : "" })} options={[{ value: "", label: "Нет" }, { value: "salamander", label: "Salamander" }]} /></label>{proxy.obfs && <label className="proxyWideField"><span>Пароль обфускации</span><input type="password" value={proxy["obfs-password"] || ""} onChange={(e) => setProxy({ "obfs-password": e.target.value })} /></label>}</>}
+            {type === "vless" && <>
+              <label><span>Flow</span><input value={proxy.flow || ""} onChange={(e) => setProxy({ flow: e.target.value })} placeholder="xtls-rprx-vision" /></label>
+              <label><span>Fingerprint</span><SelectField value={proxy["client-fingerprint"] || "chrome"} onChange={(value) => setProxy({ "client-fingerprint": value })} options={["chrome", "firefox", "safari", "edge", "qq", "randomized"].map((value) => ({ value, label: value }))} /></label>
+              <label className="proxyWideField"><span>Reality Public Key</span><input value={proxy["reality-opts"]?.["public-key"] || ""} onChange={(e) => setReality({ "public-key": e.target.value })} /></label>
+              <label className="proxyWideField"><span>Reality Short ID</span><input value={proxy["reality-opts"]?.["short-id"] || ""} onChange={(e) => setReality({ "short-id": e.target.value })} /></label>
+            </>}
+            <div className="proxyGroups proxyWideField">
+              <span>Добавить в группы исходной подписки</span>
+              <div>{availableGroups.map((group) => <label key={group}><input type="checkbox" checked={entry.groups.includes(group)} onChange={(e) => setEntry((current) => ({ ...current, groups: e.target.checked ? [...current.groups, group] : current.groups.filter((item) => item !== group) }))} /> {group}</label>)}</div>
+              {!availableGroups.length && <small>В исходной подписке нет групп.</small>}
+            </div>
+          </div>
+        )}
+        {error && <div className="error modalError">{error}</div>}
+        <div className="modalActions"><button onClick={close}>Отмена</button><button className="primary" onClick={submit}><Save /> Сохранить сервер</button></div>
+      </div>
+    </div>
+  );
+}
+
 function Editor({
   profile,
   proxies,
@@ -1019,6 +1270,10 @@ function Editor({
   const [ruleTarget, setRuleTarget] = useState(groups[0] || "DIRECT");
   const [ruleNoResolve, setRuleNoResolve] = useState(false);
   const [ruleText, setRuleText] = useState("");
+  const [customProxies, setCustomProxies] = useState<CustomProxyEntry[]>(() =>
+    normalizeCustomProxies(profile.modifications.custom_proxies),
+  );
+  const [editCustomProxyId, setEditCustomProxyId] = useState<string>();
   const [draggedRuleId, setDraggedRuleId] = useState<string | null>(null);
   const ruleRefs = useRef(new Map<string, HTMLDivElement>());
   const previousRulePositions = useRef(new Map<string, number>());
@@ -1075,30 +1330,36 @@ function Editor({
     ...(currentGeo["geox-url"] || {}),
   });
   const [err, setErr] = useState("");
+  const customProxyNames = useMemo(
+    () => customProxies.map((entry) => String(entry.proxy.name || "")).filter(Boolean),
+    [customProxies],
+  );
   const targetSuggestions = useMemo(
     () => [
       ...new Set([
         ...groups,
         ...proxies,
+        ...customProxyNames,
         "DIRECT",
         "REJECT",
         "REJECT-DROP",
         "PASS",
       ]),
     ],
-    [groups, proxies],
+    [groups, proxies, customProxyNames],
   );
   const targetBadges = useMemo(
     () =>
       Object.fromEntries([
         ...proxies.map((name) => [name, "Прокси"]),
+        ...customProxyNames.map((name) => [name, "Свой прокси"]),
         ...groups.map((name) => [name, "Группа"]),
         ...["DIRECT", "REJECT", "REJECT-DROP", "PASS"].map((name) => [
           name,
           "Политика",
         ]),
       ]),
-    [groups, proxies],
+    [groups, proxies, customProxyNames],
   );
   const valueSuggestions = useMemo(() => {
     if (ruleType === "RULE-SET") return ruleProviders;
@@ -1253,6 +1514,10 @@ function Editor({
         modifications: {
           ...profile.modifications,
           rules,
+          custom_proxies: customProxies.map(({ proxy, groups: selectedGroups }) => ({
+            proxy,
+            groups: selectedGroups,
+          })),
           overrides: parsed,
           geo: {
             mode: geo,
@@ -1367,6 +1632,48 @@ function Editor({
               />
             </label>
           </div>
+        </section>
+        <section className="panel form customProxiesPanel">
+          <div className="defaultProfilesHead">
+            <div>
+              <h3>Собственные прокси-серверы</h3>
+              <p className="hint">Добавляются к серверам исходной подписки только в этом профиле. Их можно выбирать напрямую в правилах или включать в существующие группы.</p>
+            </div>
+            <button
+              className="primary"
+              onClick={() => {
+                const created = defaultCustomProxy();
+                setCustomProxies((current) => [...current, created]);
+                setEditCustomProxyId(created.id);
+              }}
+            >
+              <CirclePlus /> Добавить сервер
+            </button>
+          </div>
+          {customProxies.length ? (
+            <div className="customProxyList">
+              {customProxies.map((entry) => (
+                <article className="customProxyCard" key={entry.id}>
+                  <span className="device"><Server /></span>
+                  <div>
+                    <b>{entry.proxy.name}</b>
+                    <small>{String(entry.proxy.type || "").toUpperCase()} · {entry.proxy.server || "сервер не указан"}:{entry.proxy.port || "—"}</small>
+                    <small>{entry.groups.length ? `Группы: ${entry.groups.join(", ")}` : "Без привязки к группе"}</small>
+                  </div>
+                  <div className="customProxyActions">
+                    <button onClick={() => setEditCustomProxyId(entry.id)}><Settings /> Настроить</button>
+                    <button
+                      className="dangerButton"
+                      title="Удалить сервер"
+                      onClick={() => setCustomProxies((current) => current.filter((item) => item.id !== entry.id))}
+                    ><Trash2 /></button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="customProxyEmpty"><Server /><span><b>Дополнительных серверов пока нет</b><small>Добавьте сервер вручную и сохраните профиль.</small></span></div>
+          )}
         </section>
         <section className="panel form">
           <h3>Основное</h3>
@@ -1674,6 +1981,27 @@ function Editor({
           </div>
         </section>
       </div>
+      {editCustomProxyId && (() => {
+        const selected = customProxies.find((entry) => entry.id === editCustomProxyId);
+        if (!selected) return null;
+        return (
+          <CustomProxyModal
+            key={selected.id}
+            initial={selected}
+            availableGroups={groups}
+            existingNames={[...proxies, ...customProxyNames]}
+            close={() => {
+              if (!selected.proxy.server)
+                setCustomProxies((current) => current.filter((entry) => entry.id !== selected.id));
+              setEditCustomProxyId(undefined);
+            }}
+            save={(updated) => {
+              setCustomProxies((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
+              setEditCustomProxyId(undefined);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -1897,7 +2225,7 @@ function Admin({
                   <span>
                     <b>{profile.name}</b>
                     <small>
-                      {(profile.modifications.rules || []).length} правил · {Object.keys(profile.modifications.overrides || {}).length} переопределений
+                      {(profile.modifications.rules || []).length} правил · {Object.keys(profile.modifications.overrides || {}).length} переопределений · {(profile.modifications.custom_proxies || []).length} своих серверов
                     </small>
                   </span>
                 </div>

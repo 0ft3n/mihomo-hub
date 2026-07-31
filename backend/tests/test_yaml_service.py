@@ -23,6 +23,28 @@ def test_apply_modifications_adds_custom_rule_sets():
     assert out["rule-providers"]["myset"]["format"] == "text"
     assert out["rule-providers"]["myset"]["url"].endswith("/rule-sets/myset.list")
 
+def test_apply_modifications_adds_custom_proxies_and_group_membership():
+    out = yaml.safe_load(apply_modifications(SOURCE, {
+        "custom_proxies": [{
+            "proxy": {
+                "name": "My Reality",
+                "type": "vless",
+                "server": "vpn.example.com",
+                "port": 443,
+                "uuid": "00000000-0000-0000-0000-000000000000",
+            },
+            "groups": ["Main"],
+        }],
+    }))
+    assert [proxy["name"] for proxy in out["proxies"]] == ["NL", "My Reality"]
+    assert out["proxy-groups"][0]["proxies"] == ["NL", "My Reality"]
+
+def test_custom_proxy_replaces_same_named_upstream_proxy():
+    out = yaml.safe_load(apply_modifications(SOURCE, {
+        "custom_proxies": [{"proxy": {"name": "NL", "type": "direct"}, "groups": []}],
+    }))
+    assert [proxy for proxy in out["proxies"] if proxy["name"] == "NL"] == [{"name": "NL", "type": "direct"}]
+
 def test_summary():
     summary = summarize(yaml.safe_load(SOURCE))
     assert summary["proxy_names"] == ["NL"]
