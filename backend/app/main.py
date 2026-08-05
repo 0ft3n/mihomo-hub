@@ -16,7 +16,7 @@ from .models import Account, Profile, Setting, Subscription
 from .schemas import CustomRuleSet, DefaultProfileTemplate, ImportRequest, LoginRequest, ProfileIn, ProfileUpdate, ProxyProbeRequest, SubscriptionUpdate
 from .probe_service import stream_proxy_routes
 from .security import current_account_id, make_session, require_admin
-from .yaml_service import apply_modifications, fetch_yaml, subscription_meta
+from .yaml_service import apply_modifications, fetch_yaml, render_rule_set, subscription_meta
 
 app = FastAPI(title="Mihomo Hub", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -287,8 +287,7 @@ def public_rule_set(name: str, db: Session = Depends(get_db)):
     target = unquote(name)
     for item in custom_rule_sets(db.get(Setting, 1)):
         if item.get("enabled", True) and item.get("name") == target:
-            payload = "\n".join(line.strip() for line in (item.get("payload") or "").splitlines() if line.strip() and not line.strip().startswith("#"))
-            return Response(payload + ("\n" if payload else ""), media_type="text/plain; charset=utf-8")
+            return Response(render_rule_set(item.get("payload") or ""), media_type="text/yaml; charset=utf-8")
     raise HTTPException(404, "Rule set не найден")
 
 

@@ -74,11 +74,44 @@ def rule_set_provider(name: str, behavior: str) -> dict[str, Any]:
     return {
         "type": "http",
         "behavior": behavior,
-        "format": "text",
+        "format": "yaml",
         "url": f"{settings.public_url}/rule-sets/{quote(name, safe='')}.list",
         "path": f"./rule-sets/mihomo-hub-{safe_name}.list",
         "interval": 86400,
     }
+
+
+def render_rule_set(payload: str) -> str:
+    """Render admin input as a valid Mihomo YAML rule-provider document."""
+    raw = str(payload or "").strip()
+    parsed: Any = None
+    if raw:
+        try:
+            parsed = yaml.safe_load(raw)
+        except yaml.YAMLError:
+            parsed = None
+
+    if isinstance(parsed, dict):
+        parsed = parsed.get("payload")
+    if isinstance(parsed, list):
+        lines = [str(item).strip() for item in parsed if str(item).strip()]
+    else:
+        lines = []
+        for source_line in raw.splitlines():
+            line = source_line.strip()
+            if not line or line.startswith("#") or line == "payload:":
+                continue
+            if line.startswith("- "):
+                line = line[2:].strip()
+            if line:
+                lines.append(line)
+
+    return yaml.safe_dump(
+        {"payload": lines},
+        allow_unicode=True,
+        sort_keys=False,
+        width=1000,
+    )
 
 
 def apply_modifications(source: str, mods: dict, custom_rule_sets: list[dict] | None = None) -> str:
