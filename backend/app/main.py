@@ -5,8 +5,8 @@ import secrets
 import re
 import yaml
 from urllib.parse import quote, unquote, urlparse
-from fastapi import Depends, FastAPI, HTTPException, Response
-from fastapi.responses import StreamingResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -16,7 +16,7 @@ from .models import Account, Profile, Setting, Subscription
 from .schemas import CustomRuleSet, DefaultProfileTemplate, ImportRequest, LoginRequest, ProfileIn, ProfileUpdate, ProxyProbeRequest, SubscriptionUpdate
 from .probe_service import stream_proxy_routes
 from .security import current_account_id, make_session, require_admin
-from .yaml_service import apply_modifications, fetch_yaml, render_rule_set, subscription_meta
+from .yaml_service import apply_modifications, fetch_yaml, render_rule_set, subscription_meta, summarize
 
 app = FastAPI(title="Mihomo Hub", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -237,6 +237,32 @@ def owned_profile(db: Session, profile_id: int, account_id: int):
     return p
 
 
+def public_profile(db: Session, slug: str) -> Profile:
+    profile = db.scalar(
+        select(Profile).join(Subscription).where(
+            Profile.slug == slug,
+            Profile.enabled.is_(True),
+            Subscription.enabled.is_(True),
+        )
+    )
+    if not profile:
+        raise HTTPException(404, "Подписка не найдена или отключена")
+    return profile
+
+
+def wants_subscription_page(request: Request, output_format: str | None) -> bool:
+    if (output_format or "").lower() in {"yaml", "raw", "text"}:
+        return False
+    user_agent = request.headers.get("user-agent", "").lower()
+    client_markers = (
+        "clash", "mihomo", "koala", "flclash", "stash", "sing-box",
+        "singbox", "v2ray", "shadowrocket", "surge", "hiddify",
+    )
+    if any(marker in user_agent for marker in client_markers):
+        return False
+    return "text/html" in request.headers.get("accept", "").lower()
+
+
 @app.patch("/api/profiles/{profile_id}")
 def update_profile(profile_id: int, body: ProfileUpdate, account_id: int = Depends(current_account_id), db: Session = Depends(get_db)):
     p = owned_profile(db, profile_id, account_id)
@@ -254,10 +280,54 @@ def rotate_profile(profile_id: int, account_id: int = Depends(current_account_id
     p = owned_profile(db, profile_id, account_id); p.slug = secrets.token_urlsafe(32); db.commit(); return serialize_profile(p)
 
 
+@app.get("/api/public/profile/{slug}")
+async def public_profile_info(slug: str, db: Session = Depends(get_db)):
+    profile = public_profile(db, slug)
+    sub = profile.subscription
+    try:
+        raw, parsed, upstream_headers = await fetch_yaml(sub.source_url)
+        sub.cached_yaml = raw
+        sub.source_meta = subscription_meta(parsed, upstream_headers, sub.source_meta)
+        sub.updated_at = datetime.now(timezone.utc)
+        db.commit()
+    except Exception:
+        # The public page remains available from the last valid cached config.
+        pass
+    rendered = apply_modifications(
+        sub.cached_yaml or "{}",
+        profile.modifications,
+        custom_rule_sets(db.get(Setting, 1)),
+    )
+    try:
+        summary = summarize(yaml.safe_load(rendered) or {})
+    except yaml.YAMLError:
+        summary = {"proxy_count": 0, "group_count": 0, "rule_count": 0, "proxy_types": []}
+    limits = sub.source_meta.get("subscription") if isinstance(sub.source_meta, dict) else None
+    return {
+        "title": sub.name,
+        "profile_name": profile.name,
+        "enabled": profile.enabled and sub.enabled,
+        "updated_at": sub.updated_at,
+        "created_at": profile.created_at,
+        "limits": limits,
+        "proxy_count": summary.get("proxy_count", 0),
+        "group_count": summary.get("group_count", 0),
+        "rule_count": summary.get("rule_count", 0),
+        "proxy_types": summary.get("proxy_types", []),
+        "subscription_url": f"{settings.public_url}/sub/{profile.slug}",
+        "yaml_url": f"{settings.public_url}/sub/{profile.slug}?format=yaml",
+    }
+
+
 @app.get("/sub/{slug}")
-async def public_subscription(slug: str, db: Session = Depends(get_db)):
-    p = db.scalar(select(Profile).join(Subscription).where(Profile.slug == slug, Profile.enabled.is_(True), Subscription.enabled.is_(True)))
-    if not p: raise HTTPException(404, "Подписка не найдена или отключена")
+async def public_subscription(slug: str, request: Request, format: str | None = None, db: Session = Depends(get_db)):
+    p = public_profile(db, slug)
+    if wants_subscription_page(request, format):
+        return RedirectResponse(
+            url=f"/subscription/{quote(slug, safe='')}",
+            status_code=307,
+            headers={"Cache-Control": "no-store", "Vary": "Accept, User-Agent"},
+        )
     sub = p.subscription
     try:
         raw, parsed, upstream_headers = await fetch_yaml(sub.source_url)
@@ -274,6 +344,8 @@ async def public_subscription(slug: str, db: Session = Depends(get_db)):
     response_headers = {
         "Content-Disposition": f"inline; filename=\"{safe_filename}.yaml\"; filename*=UTF-8''{quote(sub.name)}.yaml",
         "Profile-Title": f"base64:{encoded_title}",
+        "Cache-Control": "no-store",
+        "Vary": "Accept, User-Agent",
     }
     for key, value in upstream_headers.items():
         response_headers[key] = value
