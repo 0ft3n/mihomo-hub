@@ -1,0 +1,7 @@
+log-level: warning
+external-controller: 0.0.0.0:9090
+secret: mihomo-hub-probe
+proxies: []
+proxy-groups: []
+rules:
+  - MATCH,DIRECT

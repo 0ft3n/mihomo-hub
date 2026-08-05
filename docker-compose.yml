@@ -16,8 +16,16 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       PUBLIC_URL: ${PUBLIC_URL}
+      MIHOMO_PROBE_URL: http://mihomo-probe:9090
+      MIHOMO_PROBE_SECRET: mihomo-hub-probe
     depends_on:
       postgres: {condition: service_healthy}
+      mihomo-probe: {condition: service_started}
+  mihomo-probe:
+    image: metacubex/mihomo:latest
+    restart: unless-stopped
+    volumes:
+      - ./mihomo-probe.yaml:/root/.config/mihomo/config.yaml:ro
   web:
     build: ./frontend
     restart: unless-stopped

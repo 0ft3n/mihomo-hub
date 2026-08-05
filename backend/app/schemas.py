@@ -52,3 +52,8 @@ class CustomRuleSet(BaseModel):
 class SubscriptionUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=160)
     enabled: bool | None = None
+
+
+class ProxyProbeRequest(BaseModel):
+    proxy: dict[str, Any]
+    timeout: int = Field(default=8000, ge=3000, le=15000)

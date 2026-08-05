@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .database import Base, engine, get_db
 from .models import Account, Profile, Setting, Subscription
-from .schemas import CustomRuleSet, DefaultProfileTemplate, ImportRequest, LoginRequest, ProfileIn, ProfileUpdate, SubscriptionUpdate
+from .schemas import CustomRuleSet, DefaultProfileTemplate, ImportRequest, LoginRequest, ProfileIn, ProfileUpdate, ProxyProbeRequest, SubscriptionUpdate
+from .probe_service import probe_proxy_routes
 from .security import current_account_id, make_session, require_admin
 from .yaml_service import apply_modifications, fetch_yaml, subscription_meta
 
@@ -206,6 +207,17 @@ async def refresh(sub_id: int, account_id: int = Depends(current_account_id), db
     db.commit(); return serialize_subscription(sub, True)
 
 
+@app.post("/api/subscriptions/{sub_id}/probe-proxy")
+async def probe_subscription_proxy(
+    sub_id: int,
+    body: ProxyProbeRequest,
+    account_id: int = Depends(current_account_id),
+    db: Session = Depends(get_db),
+):
+    sub = owned_subscription(db, sub_id, account_id)
+    return await probe_proxy_routes(sub.cached_yaml, body.proxy, body.timeout)
+
+
 @app.post("/api/subscriptions/{sub_id}/profiles")
 def create_profile(sub_id: int, body: ProfileIn, account_id: int = Depends(current_account_id), db: Session = Depends(get_db)):
     owned_subscription(db, sub_id, account_id)
@@ -344,6 +356,12 @@ async def admin_refresh_subscription(sub_id: int, db: Session = Depends(get_db))
     sub.updated_at = datetime.now(timezone.utc)
     db.commit()
     return serialize_subscription(sub, True)
+
+
+@app.post("/api/admin/subscriptions/{sub_id}/probe-proxy", dependencies=[Depends(require_admin)])
+async def admin_probe_subscription_proxy(sub_id: int, body: ProxyProbeRequest, db: Session = Depends(get_db)):
+    sub = admin_subscription(db, sub_id)
+    return await probe_proxy_routes(sub.cached_yaml, body.proxy, body.timeout)
 
 
 @app.post("/api/admin/subscriptions/{sub_id}/profiles", dependencies=[Depends(require_admin)])

@@ -101,6 +101,18 @@ type CustomProxyEntry = {
   proxy: Record<string, any>;
   groups: string[];
 };
+type ProxyProbeResult = {
+  name: string;
+  status: "ok" | "error";
+  delay: number | null;
+  error?: string;
+};
+type ProxyProbeResponse = {
+  best: ProxyProbeResult | null;
+  results: ProxyProbeResult[];
+  tested: number;
+  successful: number;
+};
 const defaultCustomProxy = (): CustomProxyEntry => ({
   id: newRuleId(),
   proxy: {
@@ -685,6 +697,10 @@ function Subscription({
           ]),
         ]}
         sourceYaml={data.yaml || ""}
+        probeProxy={(proxy) => request(`/subscriptions/${sub.id}/probe-proxy`, {
+          method: "POST",
+          body: JSON.stringify({ proxy }),
+        })}
         back={() => setEdit(undefined)}
         saveProfile={
           adminPassword
@@ -1274,12 +1290,14 @@ function CustomProxyModal({
   initial,
   availableGroups,
   existingNames,
+  probe,
   close,
   save,
 }: {
   initial: CustomProxyEntry;
   availableGroups: string[];
   existingNames: string[];
+  probe?: (proxy: Record<string, any>) => Promise<ProxyProbeResponse>;
   close: () => void;
   save: (entry: CustomProxyEntry) => void;
 }) {
@@ -1288,6 +1306,9 @@ function CustomProxyModal({
   const [yamlText, setYamlText] = useState("");
   const [shareLink, setShareLink] = useState("");
   const [error, setError] = useState("");
+  const [probing, setProbing] = useState(false);
+  const [probeData, setProbeData] = useState<ProxyProbeResponse>();
+  const [probeError, setProbeError] = useState("");
   useEffect(() => {
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -1296,8 +1317,11 @@ function CustomProxyModal({
     };
   }, []);
   const proxy = entry.proxy;
-  const setProxy = (patch: Record<string, any>) =>
+  const setProxy = (patch: Record<string, any>) => {
+    setProbeData(undefined);
+    setProbeError("");
     setEntry((current) => ({ ...current, proxy: { ...current.proxy, ...patch } }));
+  };
   const setReality = (patch: Record<string, any>) =>
     setProxy({ "reality-opts": { ...(proxy["reality-opts"] || {}), ...patch } });
   function switchMode(next: "builder" | "yaml") {
@@ -1369,6 +1393,34 @@ function CustomProxyModal({
       setError(e.message || "Проверьте параметры сервера");
     }
   }
+  async function runProbe() {
+    if (!probe) return;
+    setProbing(true);
+    setProbeError("");
+    setProbeData(undefined);
+    try {
+      let candidate = proxy;
+      if (mode === "yaml") {
+        const parsed = parseYaml(yamlText);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+          throw new Error("Конфигурация прокси должна быть YAML-объектом");
+        candidate = parsed as Record<string, any>;
+      }
+      if (!candidate.name || !candidate.type || !candidate.server || !candidate.port)
+        throw new Error("Сначала укажите название, протокол, сервер и порт");
+      const response = await probe(candidate);
+      setProbeData(response);
+      if (response.best) {
+        const updated = { ...candidate, "dialer-proxy": response.best.name };
+        setEntry((current) => ({ ...current, proxy: updated }));
+        if (mode === "yaml") setYamlText(stringifyYaml(updated, { lineWidth: 120 }));
+      }
+    } catch (e: any) {
+      setProbeError(e.message || "Не удалось проверить маршруты");
+    } finally {
+      setProbing(false);
+    }
+  }
   const type = String(proxy.type || "vless");
   const supportsNetwork = ["vless", "trojan", "vmess"].includes(type);
   const supportsTls = ["vless", "trojan", "vmess"].includes(type);
@@ -1398,7 +1450,11 @@ function CustomProxyModal({
               language="yaml"
               theme={document.documentElement.dataset.theme === "light" ? "light" : "vs-dark"}
               value={yamlText}
-              onChange={(value) => setYamlText(value || "")}
+              onChange={(value) => {
+                setYamlText(value || "");
+                setProbeData(undefined);
+                setProbeError("");
+              }}
               options={{ minimap: { enabled: false }, fontSize: 13, lineHeight: 21, tabSize: 2, automaticLayout: true, scrollBeyondLastLine: false }}
             />
           </div>
@@ -1406,10 +1462,10 @@ function CustomProxyModal({
           <div className="customProxyForm">
             <div className="proxyImportField">
               <span>Быстрый импорт ссылки подключения</span>
-              <div><input value={shareLink} onChange={(e) => setShareLink(e.target.value)} placeholder="ss://, vless://, trojan:// или hysteria2://" /><button onClick={() => { try { setEntry((current) => ({ ...current, proxy: proxyFromShareLink(shareLink) })); setShareLink(""); setError(""); } catch (e: any) { setError(e.message); } }}><ArrowDownToLine /> Импортировать</button></div>
+              <div><input value={shareLink} onChange={(e) => setShareLink(e.target.value)} placeholder="ss://, vless://, trojan:// или hysteria2://" /><button onClick={() => { try { setEntry((current) => ({ ...current, proxy: proxyFromShareLink(shareLink) })); setProbeData(undefined); setProbeError(""); setShareLink(""); setError(""); } catch (e: any) { setError(e.message); } }}><ArrowDownToLine /> Импортировать</button></div>
             </div>
             <label><span>Название</span><input value={proxy.name || ""} onChange={(e) => setProxy({ name: e.target.value })} placeholder="Мой Reality" /></label>
-            <label><span>Протокол</span><SelectField value={type} onChange={(value) => setEntry((current) => ({ ...current, proxy: proxyForType(value, current.proxy) }))} options={["vless", "trojan", "ss", "hysteria2", "vmess"].map((value) => ({ value, label: value.toUpperCase() }))} /></label>
+            <label><span>Протокол</span><SelectField value={type} onChange={(value) => { setEntry((current) => ({ ...current, proxy: proxyForType(value, current.proxy) })); setProbeData(undefined); setProbeError(""); }} options={["vless", "trojan", "ss", "hysteria2", "vmess"].map((value) => ({ value, label: value.toUpperCase() }))} /></label>
             <label className="proxyServerField"><span>Сервер</span><input value={proxy.server || ""} onChange={(e) => setProxy({ server: e.target.value })} placeholder="vpn.example.com или 203.0.113.10" /></label>
             <label><span>Порт</span><input type="number" min="1" max="65535" value={proxy.port || ""} onChange={(e) => setProxy({ port: Number(e.target.value) })} /></label>
             {supportsNetwork && <label><span>Транспорт</span><SelectField value={proxy.network || "tcp"} onChange={(value) => setProxy({ network: value })} options={["tcp", "grpc", "ws", "xhttp"].map((value) => ({ value, label: value.toUpperCase() }))} /></label>}
@@ -1448,6 +1504,49 @@ function CustomProxyModal({
             </div>
           </div>
         )}
+        {probe && (
+          <div className="proxyProbePanel">
+            <div className="proxyProbeHead">
+              <div>
+                <b><Activity /> Автоподбор промежуточного прокси</b>
+                <small>Сервер проверит полное подключение к добавляемому узлу через каждый прокси исходной подписки.</small>
+              </div>
+              <button className="secondaryAction" disabled={probing} onClick={runProbe}>
+                <Activity className={probing ? "spin" : ""} />
+                {probing ? "Проверяю маршруты…" : "Найти лучший маршрут"}
+              </button>
+            </div>
+            {probeError && <div className="error modalError">{probeError}</div>}
+            {probeData && (
+              <>
+                <div className={`proxyProbeSummary ${probeData.best ? "success" : "failed"}`}>
+                  {probeData.best ? (
+                    <><Check /><span><b>Выбран {probeData.best.name}</b><small>{probeData.best.delay} мс · работают {probeData.successful} из {probeData.tested} маршрутов</small></span></>
+                  ) : (
+                    <><X /><span><b>Рабочий маршрут не найден</b><small>Проверено прокси: {probeData.tested}</small></span></>
+                  )}
+                </div>
+                <div className="proxyProbeResults">
+                  {probeData.results.map((result) => (
+                    <button
+                      key={result.name}
+                      className={proxy["dialer-proxy"] === result.name ? "selected" : ""}
+                      disabled={result.status !== "ok"}
+                      title={result.error || ""}
+                      onClick={() => setEntry((current) => ({
+                        ...current,
+                        proxy: { ...current.proxy, "dialer-proxy": result.name },
+                      }))}
+                    >
+                      <span>{result.name}</span>
+                      {result.status === "ok" ? <b>{result.delay} мс</b> : <small>таймаут</small>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
         {error && <div className="error modalError">{error}</div>}
         <div className="modalActions"><button onClick={close}>Отмена</button><button className="primary" onClick={submit}><Save /> Сохранить сервер</button></div>
       </div>
@@ -1465,6 +1564,7 @@ function Editor({
   back,
   saved,
   saveProfile,
+  probeProxy,
   templateMode = false,
 }: {
   profile: Profile;
@@ -1475,6 +1575,7 @@ function Editor({
   back: () => void;
   saved: () => void;
   saveProfile?: (profile: { name: string; modifications: any }) => Promise<void>;
+  probeProxy?: (proxy: Record<string, any>) => Promise<ProxyProbeResponse>;
   templateMode?: boolean;
 }) {
   const [name, setName] = useState(profile.name);
@@ -2215,6 +2316,7 @@ function Editor({
             initial={selected}
             availableGroups={groups}
             existingNames={[...proxies, ...customProxyNames]}
+            probe={probeProxy}
             close={() => {
               if (!selected.proxy.server)
                 setCustomProxies((current) => current.filter((entry) => entry.id !== selected.id));
