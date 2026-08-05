@@ -1247,12 +1247,21 @@ function CustomProxyModal({
       const name = String(candidate.name).trim();
       if (existingNames.some((item) => item === name && name !== initial.proxy.name))
         throw new Error("Прокси с таким названием уже существует");
+      const dialerProxy = String(candidate["dialer-proxy"] || "").trim();
+      if (dialerProxy === name)
+        throw new Error("Сервер не может подключаться через самого себя");
+      if (dialerProxy && result.groups.includes(dialerProxy))
+        throw new Error(
+          `Уберите сервер из группы «${dialerProxy}» или выберите для цепочки другую группу`,
+        );
       const cleaned: Record<string, any> = { ...candidate, name, port };
       if (mode === "builder") {
         if (!cleaned.servername) delete cleaned.servername;
         if (!cleaned.sni) delete cleaned.sni;
         if (!cleaned.flow) delete cleaned.flow;
         if (!cleaned.encryption) delete cleaned.encryption;
+        if (dialerProxy) cleaned["dialer-proxy"] = dialerProxy;
+        else delete cleaned["dialer-proxy"];
         if (!cleaned.obfs) {
           delete cleaned.obfs;
           delete cleaned["obfs-password"];
@@ -1268,6 +1277,14 @@ function CustomProxyModal({
   const type = String(proxy.type || "vless");
   const supportsNetwork = ["vless", "trojan", "vmess"].includes(type);
   const supportsTls = ["vless", "trojan", "vmess"].includes(type);
+  const dialerOptions = [
+    ...new Set(["DIRECT", ...availableGroups, ...existingNames]),
+  ].filter((name) => name !== proxy.name);
+  const dialerBadges = Object.fromEntries([
+    ["DIRECT", "напрямую"],
+    ...availableGroups.map((name) => [name, "группа"]),
+    ...existingNames.map((name) => [name, "прокси"]),
+  ]);
   return createPortal(
     <div className="modalBackdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="subscriptionModal customProxyModal">
@@ -1301,6 +1318,19 @@ function CustomProxyModal({
             <label className="proxyServerField"><span>Сервер</span><input value={proxy.server || ""} onChange={(e) => setProxy({ server: e.target.value })} placeholder="vpn.example.com или 203.0.113.10" /></label>
             <label><span>Порт</span><input type="number" min="1" max="65535" value={proxy.port || ""} onChange={(e) => setProxy({ port: Number(e.target.value) })} /></label>
             {supportsNetwork && <label><span>Транспорт</span><SelectField value={proxy.network || "tcp"} onChange={(value) => setProxy({ network: value })} options={["tcp", "grpc", "ws", "xhttp"].map((value) => ({ value, label: value.toUpperCase() }))} /></label>}
+            <label className="proxyWideField dialerProxyField">
+              <span>Подключаться через</span>
+              <Combobox
+                value={proxy["dialer-proxy"] || ""}
+                onChange={(value) => setProxy({ "dialer-proxy": value })}
+                options={dialerOptions}
+                placeholder="Напрямую (без промежуточного прокси)"
+                badges={dialerBadges}
+              />
+              <small>
+                Выбранный прокси станет первым узлом цепочки; внешний IP останется IP этого сервера.
+              </small>
+            </label>
             {(type === "vless" || type === "vmess") && <label className="proxyWideField"><span>UUID</span><input value={proxy.uuid || ""} onChange={(e) => setProxy({ uuid: e.target.value })} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></label>}
             {(type === "trojan" || type === "ss" || type === "hysteria2") && <label className="proxyWideField"><span>Пароль</span><input type="password" value={proxy.password || ""} onChange={(e) => setProxy({ password: e.target.value })} /></label>}
             {type === "ss" && <label className="proxyWideField"><span>Шифр</span><SelectField value={proxy.cipher || "chacha20-ietf-poly1305"} onChange={(value) => setProxy({ cipher: value })} options={["chacha20-ietf-poly1305", "aes-128-gcm", "aes-256-gcm", "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm"].map((value) => ({ value, label: value }))} /></label>}
@@ -1755,6 +1785,9 @@ function Editor({
                   <div>
                     <b>{entry.proxy.name}</b>
                     <small>{String(entry.proxy.type || "").toUpperCase()} · {entry.proxy.server || "сервер не указан"}:{entry.proxy.port || "—"}</small>
+                    {entry.proxy["dialer-proxy"] && (
+                      <small>Цепочка: {entry.proxy["dialer-proxy"]} → {entry.proxy.name}</small>
+                    )}
                     <small>{entry.groups.length ? `Группы: ${entry.groups.join(", ")}` : "Без привязки к группе"}</small>
                   </div>
                   <div className="customProxyActions">

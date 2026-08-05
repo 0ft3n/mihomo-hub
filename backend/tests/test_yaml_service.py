@@ -32,11 +32,13 @@ def test_apply_modifications_adds_custom_proxies_and_group_membership():
                 "server": "vpn.example.com",
                 "port": 443,
                 "uuid": "00000000-0000-0000-0000-000000000000",
+                "dialer-proxy": "NL",
             },
             "groups": ["Main"],
         }],
     }))
     assert [proxy["name"] for proxy in out["proxies"]] == ["NL", "My Reality"]
+    assert out["proxies"][1]["dialer-proxy"] == "NL"
     assert out["proxy-groups"][0]["proxies"] == ["NL", "My Reality"]
 
 def test_custom_proxy_replaces_same_named_upstream_proxy():
