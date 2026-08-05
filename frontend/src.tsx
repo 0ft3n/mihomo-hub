@@ -1135,8 +1135,103 @@ function proxyForType(type: string, current: Record<string, any>) {
   };
 }
 
+function decodeUrlSafeBase64(value: string) {
+  const normalized = decodeURIComponent(value)
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const binary = atob(padded);
+  return new TextDecoder().decode(
+    Uint8Array.from(binary, (character) => character.charCodeAt(0)),
+  );
+}
+
+function splitSsCredentials(value: string) {
+  let decoded: string;
+  try {
+    decoded = decodeUrlSafeBase64(value);
+  } catch {
+    decoded = decodeURIComponent(value);
+  }
+  const separator = decoded.indexOf(":");
+  if (separator < 1)
+    throw new Error("В Shadowsocks-ссылке отсутствуют cipher или пароль");
+  return {
+    cipher: decoded.slice(0, separator),
+    password: decoded.slice(separator + 1),
+  };
+}
+
+function parseSsPlugin(value: string | null) {
+  if (!value) return {};
+  const parts = value.split(";").filter(Boolean);
+  const originalName = parts.shift() || "";
+  const plugin = ["obfs-local", "simple-obfs"].includes(originalName)
+    ? "obfs"
+    : originalName;
+  const opts: Record<string, string | boolean> = {};
+  for (const part of parts) {
+    const separator = part.indexOf("=");
+    const key = separator < 0 ? part : part.slice(0, separator);
+    const optionValue = separator < 0 ? true : part.slice(separator + 1);
+    if (plugin === "obfs" && key === "obfs") opts.mode = optionValue;
+    else if (plugin === "obfs" && key === "obfs-host") opts.host = optionValue;
+    else opts[key] = optionValue;
+  }
+  return plugin
+    ? { plugin, ...(Object.keys(opts).length ? { "plugin-opts": opts } : {}) }
+    : {};
+}
+
+function proxyFromSsLink(raw: string): Record<string, any> {
+  const source = raw.trim();
+  let payload = source.slice("ss://".length);
+  const hashIndex = payload.indexOf("#");
+  const name = hashIndex >= 0
+    ? decodeURIComponent(payload.slice(hashIndex + 1))
+    : "Импортированный Shadowsocks";
+  if (hashIndex >= 0) payload = payload.slice(0, hashIndex);
+  const queryIndex = payload.indexOf("?");
+  const query = new URLSearchParams(queryIndex >= 0 ? payload.slice(queryIndex + 1) : "");
+  if (queryIndex >= 0) payload = payload.slice(0, queryIndex);
+
+  let credentials: { cipher: string; password: string };
+  let address: string;
+  const atIndex = payload.lastIndexOf("@");
+  if (atIndex >= 0) {
+    credentials = splitSsCredentials(payload.slice(0, atIndex));
+    address = payload.slice(atIndex + 1);
+  } else {
+    const decoded = decodeUrlSafeBase64(payload);
+    const decodedAtIndex = decoded.lastIndexOf("@");
+    if (decodedAtIndex < 0)
+      throw new Error("В Shadowsocks-ссылке отсутствуют сервер и порт");
+    credentials = splitSsCredentials(decoded.slice(0, decodedAtIndex));
+    address = decoded.slice(decodedAtIndex + 1);
+  }
+
+  const addressUrl = new URL(`ss://placeholder@${address}`);
+  const server = addressUrl.hostname;
+  const port = Number(addressUrl.port);
+  if (!server || !port)
+    throw new Error("В Shadowsocks-ссылке отсутствуют сервер или порт");
+  return {
+    name,
+    type: "ss",
+    server,
+    port,
+    cipher: credentials.cipher,
+    password: credentials.password,
+    udp: true,
+    ...parseSsPlugin(query.get("plugin")),
+  };
+}
+
 function proxyFromShareLink(raw: string): Record<string, any> {
-  const url = new URL(raw.trim());
+  const source = raw.trim();
+  if (source.toLowerCase().startsWith("ss://"))
+    return proxyFromSsLink(source);
+  const url = new URL(source);
   const scheme = url.protocol.replace(":", "").toLowerCase();
   const name = decodeURIComponent(url.hash.slice(1)) || "Импортированный сервер";
   const server = url.hostname;
@@ -1172,7 +1267,7 @@ function proxyFromShareLink(raw: string): Record<string, any> {
     return { name, type: "trojan", server, port, password: decodeURIComponent(url.username), network, udp: true, tls: true, sni: query.get("sni") || query.get("peer") || "", "client-fingerprint": query.get("fp") || "chrome", ...transport };
   if (["hysteria2", "hy2"].includes(scheme))
     return { name, type: "hysteria2", server, port, password: decodeURIComponent(url.username), udp: true, sni: query.get("sni") || "", obfs: query.get("obfs") || "", "obfs-password": query.get("obfs-password") || query.get("obfsParam") || "" };
-  throw new Error("Поддерживается импорт ссылок vless://, trojan:// и hysteria2://");
+  throw new Error("Поддерживается импорт ссылок ss://, vless://, trojan:// и hysteria2://");
 }
 
 function CustomProxyModal({
@@ -1311,7 +1406,7 @@ function CustomProxyModal({
           <div className="customProxyForm">
             <div className="proxyImportField">
               <span>Быстрый импорт ссылки подключения</span>
-              <div><input value={shareLink} onChange={(e) => setShareLink(e.target.value)} placeholder="vless://, trojan:// или hysteria2://" /><button onClick={() => { try { setEntry((current) => ({ ...current, proxy: proxyFromShareLink(shareLink) })); setShareLink(""); setError(""); } catch (e: any) { setError(e.message); } }}><ArrowDownToLine /> Импортировать</button></div>
+              <div><input value={shareLink} onChange={(e) => setShareLink(e.target.value)} placeholder="ss://, vless://, trojan:// или hysteria2://" /><button onClick={() => { try { setEntry((current) => ({ ...current, proxy: proxyFromShareLink(shareLink) })); setShareLink(""); setError(""); } catch (e: any) { setError(e.message); } }}><ArrowDownToLine /> Импортировать</button></div>
             </div>
             <label><span>Название</span><input value={proxy.name || ""} onChange={(e) => setProxy({ name: e.target.value })} placeholder="Мой Reality" /></label>
             <label><span>Протокол</span><SelectField value={type} onChange={(value) => setEntry((current) => ({ ...current, proxy: proxyForType(value, current.proxy) }))} options={["vless", "trojan", "ss", "hysteria2", "vmess"].map((value) => ({ value, label: value.toUpperCase() }))} /></label>
