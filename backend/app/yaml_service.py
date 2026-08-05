@@ -76,7 +76,7 @@ def rule_set_provider(name: str, behavior: str) -> dict[str, Any]:
         "behavior": behavior,
         "format": "yaml",
         "url": f"{settings.public_url}/rule-sets/{quote(name, safe='')}.list",
-        "path": f"./rule-sets/mihomo-hub-{safe_name}.list",
+        "path": f"./rule-sets/mihomo-hub-{safe_name}.yaml",
         "interval": 86400,
     }
 

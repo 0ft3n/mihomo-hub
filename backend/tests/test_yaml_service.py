@@ -22,6 +22,7 @@ def test_apply_modifications_adds_custom_rule_sets():
     assert out["rule-providers"]["myset"]["behavior"] == "domain"
     assert out["rule-providers"]["myset"]["format"] == "yaml"
     assert out["rule-providers"]["myset"]["url"].endswith("/rule-sets/myset.list")
+    assert out["rule-providers"]["myset"]["path"].endswith("mihomo-hub-myset.yaml")
 
 def test_render_rule_set_accepts_list_or_plain_lines():
     expected = ["DOMAIN-KEYWORD,spacecore", "IP-CIDR,37.27.195.94/32,no-resolve"]
