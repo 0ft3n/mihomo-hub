@@ -106,18 +106,21 @@ type ProxyProbeResult = {
   status: "pending" | "ok" | "error";
   delay: number | null;
   error?: string;
+  stage?: "upstream" | "target" | "complete";
+  upstream_delay?: number | null;
 };
 type ProxyProbeResponse = {
   best: ProxyProbeResult | null;
   results: ProxyProbeResult[];
   tested: number;
   successful: number;
+  diagnosis?: string;
 };
 type ProxyProbeEvent =
   | { type: "start"; names: string[]; tested: number }
   | { type: "ready" }
   | { type: "result"; result: ProxyProbeResult; completed: number; tested: number }
-  | { type: "complete"; best: ProxyProbeResult | null; tested: number; successful: number }
+  | { type: "complete"; best: ProxyProbeResult | null; tested: number; successful: number; diagnosis?: string }
   | { type: "error"; message: string };
 const defaultCustomProxy = (): CustomProxyEntry => ({
   id: newRuleId(),
@@ -1480,6 +1483,7 @@ function CustomProxyModal({
             results: event.names.map((name) => ({ name, status: "pending", delay: null })),
             tested: event.tested,
             successful: 0,
+            diagnosis: "Подготавливаю проверку маршрутов",
           });
         } else if (event.type === "result") {
           setProbeData((current) => current ? {
@@ -1493,6 +1497,7 @@ function CustomProxyModal({
             best: event.best,
             tested: event.tested,
             successful: event.successful,
+            diagnosis: event.diagnosis,
           } : current);
         }
       });
@@ -1612,7 +1617,7 @@ function CustomProxyModal({
                   ) : probeData.best ? (
                     <><Check /><span><b>Выбран {probeData.best.name}</b><small>{probeData.best.delay} мс · работают {probeData.successful} из {probeData.tested} маршрутов</small></span></>
                   ) : (
-                    <><X /><span><b>Рабочий маршрут не найден</b><small>Проверено прокси: {probeData.tested}</small></span></>
+                    <><X /><span><b>Рабочий маршрут не найден</b><small>{probeData.diagnosis || `Проверено прокси: ${probeData.tested}`}</small></span></>
                   )}
                 </div>
                 <div className="proxyProbeProgress"><i style={{ width: `${probeData.tested ? probeCompleted / probeData.tested * 100 : 0}%` }} /></div>
@@ -1629,7 +1634,15 @@ function CustomProxyModal({
                       }))}
                     >
                       <span>{result.name}</span>
-                      {result.status === "ok" ? <b>{result.delay} мс</b> : result.status === "pending" ? <small className="pending">ожидание</small> : <small>таймаут</small>}
+                      {result.status === "ok" ? (
+                        <b>{result.delay} мс</b>
+                      ) : result.status === "pending" ? (
+                        <small className="pending">ожидание</small>
+                      ) : result.stage === "upstream" ? (
+                        <small>прокси недоступен</small>
+                      ) : (
+                        <small>{result.upstream_delay ? `цель не отвечает · вход ${result.upstream_delay} мс` : "цель не отвечает"}</small>
+                      )}
                     </button>
                   ))}
                 </div>

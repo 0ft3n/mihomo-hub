@@ -19,6 +19,14 @@ _TEST_URL = "https://www.gstatic.com/generate_204"
 logger = logging.getLogger("uvicorn.error")
 
 
+def _best_result(results: list[dict]) -> dict | None:
+    """Prefer a working chained route; DIRECT is only the diagnostic fallback."""
+    return next(
+        (item for item in results if item["status"] == "ok" and item["name"] != "DIRECT"),
+        next((item for item in results if item["status"] == "ok"), None),
+    )
+
+
 def _safe_candidate_server(value: object) -> bool:
     server = str(value or "").strip().rstrip(".").lower()
     if not server or server == "localhost":
@@ -74,8 +82,11 @@ def build_probe_config(source_yaml: str, target_proxy: dict) -> tuple[dict, list
     target.pop("dialer-proxy", None)
 
     token = secrets.token_hex(5)
-    mappings: list[tuple[str, str]] = []
-    tests: list[dict] = []
+    direct_name = f"__hub_probe_{token}_direct"
+    direct_test = deepcopy(target)
+    direct_test["name"] = direct_name
+    mappings: list[tuple[str, str]] = [(direct_name, "DIRECT")]
+    tests: list[dict] = [direct_test]
     for index, candidate in enumerate(candidates):
         test_name = f"__hub_probe_{token}_{index}"
         test_proxy = deepcopy(target)
@@ -95,25 +106,58 @@ def build_probe_config(source_yaml: str, target_proxy: dict) -> tuple[dict, list
     return config, mappings
 
 
+def _error_message(exc: Exception) -> str:
+    message = str(exc)
+    if isinstance(exc, httpx.HTTPStatusError):
+        try:
+            message = exc.response.json().get("message") or exc.response.text
+        except Exception:
+            message = exc.response.text
+    return message[:240] or "Проверка не пройдена"
+
+
+async def _delay(client: httpx.AsyncClient, proxy_name: str, timeout: int) -> int:
+    response = await client.get(
+        f"/proxies/{quote(proxy_name, safe='')}/delay",
+        params={"timeout": timeout, "url": _TEST_URL},
+        timeout=timeout / 1000 + 3,
+    )
+    response.raise_for_status()
+    return int(response.json().get("delay"))
+
+
 async def _measure(client: httpx.AsyncClient, semaphore: asyncio.Semaphore, test_name: str, candidate_name: str, timeout: int) -> dict:
     async with semaphore:
+        upstream_delay = None
+        if candidate_name != "DIRECT":
+            try:
+                upstream_delay = await _delay(client, candidate_name, min(timeout, 6000))
+            except Exception as exc:
+                return {
+                    "name": candidate_name,
+                    "status": "error",
+                    "stage": "upstream",
+                    "delay": None,
+                    "error": _error_message(exc),
+                }
         try:
-            response = await client.get(
-                f"/proxies/{quote(test_name, safe='')}/delay",
-                params={"timeout": timeout, "url": _TEST_URL},
-                timeout=timeout / 1000 + 3,
-            )
-            response.raise_for_status()
-            delay = int(response.json().get("delay"))
-            return {"name": candidate_name, "status": "ok", "delay": delay}
+            delay = await _delay(client, test_name, timeout)
+            return {
+                "name": candidate_name,
+                "status": "ok",
+                "stage": "complete",
+                "delay": delay,
+                "upstream_delay": upstream_delay,
+            }
         except Exception as exc:
-            message = str(exc)
-            if isinstance(exc, httpx.HTTPStatusError):
-                try:
-                    message = exc.response.json().get("message") or exc.response.text
-                except Exception:
-                    message = exc.response.text
-            return {"name": candidate_name, "status": "error", "delay": None, "error": message[:240] or "Проверка не пройдена"}
+            return {
+                "name": candidate_name,
+                "status": "error",
+                "stage": "target",
+                "delay": None,
+                "upstream_delay": upstream_delay,
+                "error": _error_message(exc),
+            }
 
 
 async def probe_proxy_routes(source_yaml: str, target_proxy: dict, timeout: int) -> dict:
@@ -144,7 +188,7 @@ async def probe_proxy_routes(source_yaml: str, target_proxy: dict, timeout: int)
             ))
 
     results.sort(key=lambda item: (item["status"] != "ok", item["delay"] if item["delay"] is not None else 10**9, item["name"]))
-    best = next((item for item in results if item["status"] == "ok"), None)
+    best = _best_result(results)
     return {
         "best": best,
         "results": results,
@@ -209,12 +253,23 @@ async def stream_proxy_routes(source_yaml: str, target_proxy: dict, timeout: int
             await asyncio.gather(*tasks, return_exceptions=True)
 
     results.sort(key=lambda item: (item["status"] != "ok", item["delay"] if item["delay"] is not None else 10**9, item["name"]))
-    best = next((item for item in results if item["status"] == "ok"), None)
+    best = _best_result(results)
     successful = sum(item["status"] == "ok" for item in results)
+    direct = next((item for item in results if item["name"] == "DIRECT"), None)
+    healthy_upstreams = sum(item.get("stage") != "upstream" for item in results if item["name"] != "DIRECT")
+    if best and best["name"] != "DIRECT":
+        diagnosis = "Найден рабочий полный маршрут"
+    elif direct and direct["status"] == "ok":
+        diagnosis = "Целевой сервер работает напрямую, но не отвечает через upstream-прокси"
+    elif healthy_upstreams:
+        diagnosis = "Промежуточные прокси работают, но целевой сервер не завершает handshake"
+    else:
+        diagnosis = "Прокси исходной подписки недоступны с сервера Mihomo Hub"
     logger.info("Completed route probe: %d/%d successful, best=%s", successful, len(names), best and best["name"])
     yield event({
         "type": "complete",
         "best": best,
         "tested": len(names),
         "successful": successful,
+        "diagnosis": diagnosis,
     })
