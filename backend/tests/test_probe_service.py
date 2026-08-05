@@ -1,4 +1,7 @@
-from app.probe_service import build_probe_config
+import asyncio
+import json
+
+from app.probe_service import build_probe_config, stream_proxy_routes
 
 
 SOURCE = """
@@ -41,3 +44,46 @@ def test_build_probe_config_creates_one_chain_per_real_source_proxy():
     assert test_proxy["dialer-proxy"] == "NL"
     assert test_proxy["server"] == "target.example.com"
     assert config["proxy-groups"] == []
+
+
+def test_stream_emits_candidates_and_live_result(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"delay": 42}
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def put(self, *args, **kwargs):
+            return Response()
+
+        async def get(self, *args, **kwargs):
+            return Response()
+
+    monkeypatch.setattr("app.probe_service.httpx.AsyncClient", Client)
+
+    async def collect():
+        return [json.loads(line) async for line in stream_proxy_routes(SOURCE, {
+            "name": "Custom",
+            "type": "ss",
+            "server": "target.example.com",
+            "port": 8388,
+            "cipher": "aes-256-gcm",
+            "password": "secret",
+        }, 3000)]
+
+    events = asyncio.run(collect())
+    assert [event["type"] for event in events] == ["start", "ready", "result", "complete"]
+    assert events[0]["names"] == ["NL"]
+    assert events[2]["result"] == {"name": "NL", "status": "ok", "delay": 42}
+    assert events[3]["best"]["name"] == "NL"

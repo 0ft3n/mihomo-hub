@@ -6,6 +6,7 @@ import re
 import yaml
 from urllib.parse import quote, unquote, urlparse
 from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -13,7 +14,7 @@ from .config import settings
 from .database import Base, engine, get_db
 from .models import Account, Profile, Setting, Subscription
 from .schemas import CustomRuleSet, DefaultProfileTemplate, ImportRequest, LoginRequest, ProfileIn, ProfileUpdate, ProxyProbeRequest, SubscriptionUpdate
-from .probe_service import probe_proxy_routes
+from .probe_service import stream_proxy_routes
 from .security import current_account_id, make_session, require_admin
 from .yaml_service import apply_modifications, fetch_yaml, subscription_meta
 
@@ -215,7 +216,12 @@ async def probe_subscription_proxy(
     db: Session = Depends(get_db),
 ):
     sub = owned_subscription(db, sub_id, account_id)
-    return await probe_proxy_routes(sub.cached_yaml, body.proxy, body.timeout)
+    stream = stream_proxy_routes(sub.cached_yaml, body.proxy, body.timeout)
+    return StreamingResponse(
+        stream,
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/subscriptions/{sub_id}/profiles")
@@ -361,7 +367,12 @@ async def admin_refresh_subscription(sub_id: int, db: Session = Depends(get_db))
 @app.post("/api/admin/subscriptions/{sub_id}/probe-proxy", dependencies=[Depends(require_admin)])
 async def admin_probe_subscription_proxy(sub_id: int, body: ProxyProbeRequest, db: Session = Depends(get_db)):
     sub = admin_subscription(db, sub_id)
-    return await probe_proxy_routes(sub.cached_yaml, body.proxy, body.timeout)
+    stream = stream_proxy_routes(sub.cached_yaml, body.proxy, body.timeout)
+    return StreamingResponse(
+        stream,
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/admin/subscriptions/{sub_id}/profiles", dependencies=[Depends(require_admin)])

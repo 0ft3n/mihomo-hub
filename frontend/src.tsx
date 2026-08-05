@@ -103,7 +103,7 @@ type CustomProxyEntry = {
 };
 type ProxyProbeResult = {
   name: string;
-  status: "ok" | "error";
+  status: "pending" | "ok" | "error";
   delay: number | null;
   error?: string;
 };
@@ -113,6 +113,12 @@ type ProxyProbeResponse = {
   tested: number;
   successful: number;
 };
+type ProxyProbeEvent =
+  | { type: "start"; names: string[]; tested: number }
+  | { type: "ready" }
+  | { type: "result"; result: ProxyProbeResult; completed: number; tested: number }
+  | { type: "complete"; best: ProxyProbeResult | null; tested: number; successful: number }
+  | { type: "error"; message: string };
 const defaultCustomProxy = (): CustomProxyEntry => ({
   id: newRuleId(),
   proxy: {
@@ -194,6 +200,54 @@ async function api(path: string, options: any = {}) {
         (await r.json().catch(() => ({}))).detail || "Ошибка запроса",
       );
     return r.status === 204 ? null : r.json();
+  } finally {
+    activeRequests = Math.max(activeRequests - 1, 0);
+    emitLoading();
+  }
+}
+
+async function streamApi(
+  path: string,
+  options: any,
+  onEvent: (event: ProxyProbeEvent) => void,
+): Promise<ProxyProbeResponse> {
+  activeRequests += 1;
+  emitLoading();
+  try {
+    const response = await fetch(API + path, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/x-ndjson",
+        Authorization: `Bearer ${token()}`,
+        ...options.headers,
+      },
+    });
+    if (!response.ok)
+      throw new Error((await response.json().catch(() => ({}))).detail || "Ошибка запуска проверки");
+    if (!response.body) throw new Error("Браузер не поддерживает потоковый ответ проверки");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let completed: ProxyProbeResponse | undefined;
+    while (true) {
+      const chunk = await reader.read();
+      buffer += decoder.decode(chunk.value || new Uint8Array(), { stream: !chunk.done });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const event = JSON.parse(line) as ProxyProbeEvent;
+        onEvent(event);
+        if (event.type === "error") throw new Error(event.message);
+        if (event.type === "complete")
+          completed = { ...event, results: [] };
+      }
+      if (chunk.done) break;
+    }
+    if (!completed) throw new Error("Проверка завершилась без итогового результата");
+    return completed;
   } finally {
     activeRequests = Math.max(activeRequests - 1, 0);
     emitLoading();
@@ -663,6 +717,17 @@ function Subscription({
         ...(adminPassword ? { "X-Admin-Password": adminPassword } : {}),
       },
     });
+  const streamRequest = (
+    path: string,
+    options: any,
+    onEvent: (event: ProxyProbeEvent) => void,
+  ) => streamApi(`${adminPassword ? "/admin" : ""}${path}`, {
+    ...options,
+    headers: {
+      ...options.headers,
+      ...(adminPassword ? { "X-Admin-Password": adminPassword } : {}),
+    },
+  }, onEvent);
   useEffect(() => {
     request(`/subscriptions/${sub.id}`).then(setFull);
     setSubscriptionName(sub.name);
@@ -697,10 +762,10 @@ function Subscription({
           ]),
         ]}
         sourceYaml={data.yaml || ""}
-        probeProxy={(proxy) => request(`/subscriptions/${sub.id}/probe-proxy`, {
+        probeProxy={(proxy, onEvent) => streamRequest(`/subscriptions/${sub.id}/probe-proxy`, {
           method: "POST",
           body: JSON.stringify({ proxy }),
-        })}
+        }, onEvent)}
         back={() => setEdit(undefined)}
         saveProfile={
           adminPassword
@@ -1297,7 +1362,7 @@ function CustomProxyModal({
   initial: CustomProxyEntry;
   availableGroups: string[];
   existingNames: string[];
-  probe?: (proxy: Record<string, any>) => Promise<ProxyProbeResponse>;
+  probe?: (proxy: Record<string, any>, onEvent: (event: ProxyProbeEvent) => void) => Promise<ProxyProbeResponse>;
   close: () => void;
   save: (entry: CustomProxyEntry) => void;
 }) {
@@ -1408,8 +1473,29 @@ function CustomProxyModal({
       }
       if (!candidate.name || !candidate.type || !candidate.server || !candidate.port)
         throw new Error("Сначала укажите название, протокол, сервер и порт");
-      const response = await probe(candidate);
-      setProbeData(response);
+      const response = await probe(candidate, (event) => {
+        if (event.type === "start") {
+          setProbeData({
+            best: null,
+            results: event.names.map((name) => ({ name, status: "pending", delay: null })),
+            tested: event.tested,
+            successful: 0,
+          });
+        } else if (event.type === "result") {
+          setProbeData((current) => current ? {
+            ...current,
+            successful: current.successful + (event.result.status === "ok" ? 1 : 0),
+            results: current.results.map((item) => item.name === event.result.name ? event.result : item),
+          } : current);
+        } else if (event.type === "complete") {
+          setProbeData((current) => current ? {
+            ...current,
+            best: event.best,
+            tested: event.tested,
+            successful: event.successful,
+          } : current);
+        }
+      });
       if (response.best) {
         const updated = { ...candidate, "dialer-proxy": response.best.name };
         setEntry((current) => ({ ...current, proxy: updated }));
@@ -1432,6 +1518,7 @@ function CustomProxyModal({
     ...availableGroups.map((name) => [name, "группа"]),
     ...existingNames.map((name) => [name, "прокси"]),
   ]);
+  const probeCompleted = probeData?.results.filter((result) => result.status !== "pending").length || 0;
   return createPortal(
     <div className="modalBackdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="subscriptionModal customProxyModal">
@@ -1519,13 +1606,16 @@ function CustomProxyModal({
             {probeError && <div className="error modalError">{probeError}</div>}
             {probeData && (
               <>
-                <div className={`proxyProbeSummary ${probeData.best ? "success" : "failed"}`}>
-                  {probeData.best ? (
+                <div className={`proxyProbeSummary ${probing ? "running" : probeData.best ? "success" : "failed"}`}>
+                  {probing ? (
+                    <><Activity className="pulse" /><span><b>Проверено {probeCompleted} из {probeData.tested}</b><small>Рабочих маршрутов: {probeData.successful}</small></span></>
+                  ) : probeData.best ? (
                     <><Check /><span><b>Выбран {probeData.best.name}</b><small>{probeData.best.delay} мс · работают {probeData.successful} из {probeData.tested} маршрутов</small></span></>
                   ) : (
                     <><X /><span><b>Рабочий маршрут не найден</b><small>Проверено прокси: {probeData.tested}</small></span></>
                   )}
                 </div>
+                <div className="proxyProbeProgress"><i style={{ width: `${probeData.tested ? probeCompleted / probeData.tested * 100 : 0}%` }} /></div>
                 <div className="proxyProbeResults">
                   {probeData.results.map((result) => (
                     <button
@@ -1539,7 +1629,7 @@ function CustomProxyModal({
                       }))}
                     >
                       <span>{result.name}</span>
-                      {result.status === "ok" ? <b>{result.delay} мс</b> : <small>таймаут</small>}
+                      {result.status === "ok" ? <b>{result.delay} мс</b> : result.status === "pending" ? <small className="pending">ожидание</small> : <small>таймаут</small>}
                     </button>
                   ))}
                 </div>
@@ -1575,7 +1665,7 @@ function Editor({
   back: () => void;
   saved: () => void;
   saveProfile?: (profile: { name: string; modifications: any }) => Promise<void>;
-  probeProxy?: (proxy: Record<string, any>) => Promise<ProxyProbeResponse>;
+  probeProxy?: (proxy: Record<string, any>, onEvent: (event: ProxyProbeEvent) => void) => Promise<ProxyProbeResponse>;
   templateMode?: boolean;
 }) {
   const [name, setName] = useState(profile.name);

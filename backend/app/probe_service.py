@@ -1,6 +1,8 @@
 import asyncio
 from copy import deepcopy
 import ipaddress
+import json
+import logging
 import secrets
 from urllib.parse import quote
 
@@ -14,6 +16,7 @@ from .config import settings
 _probe_lock = asyncio.Lock()
 _MAX_CANDIDATES = 256
 _TEST_URL = "https://www.gstatic.com/generate_204"
+logger = logging.getLogger("uvicorn.error")
 
 
 def _safe_candidate_server(value: object) -> bool:
@@ -149,3 +152,69 @@ async def probe_proxy_routes(source_yaml: str, target_proxy: dict, timeout: int)
         "successful": sum(item["status"] == "ok" for item in results),
         "test_url": _TEST_URL,
     }
+
+
+async def stream_proxy_routes(source_yaml: str, target_proxy: dict, timeout: int):
+    """Emit newline-delimited progress events while Mihomo measures every route."""
+    try:
+        serialized = yaml.safe_dump(target_proxy, allow_unicode=True)
+        if len(serialized.encode("utf-8")) > 64 * 1024:
+            raise HTTPException(413, "Конфигурация прокси слишком большая для проверки")
+        config, mappings = build_probe_config(source_yaml, target_proxy)
+    except HTTPException as exc:
+        yield json.dumps({"type": "error", "message": str(exc.detail)}, ensure_ascii=False) + "\n"
+        return
+    payload = yaml.safe_dump(config, allow_unicode=True, sort_keys=False, width=1000)
+    headers = {"Authorization": f"Bearer {settings.mihomo_probe_secret}"}
+    names = [candidate_name for _, candidate_name in mappings]
+
+    def event(data: dict) -> str:
+        return json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+    logger.info("Starting route probe for %s through %d candidates", target_proxy.get("name"), len(names))
+    yield event({"type": "start", "names": names, "tested": len(names)})
+    results: list[dict] = []
+    tasks: list[asyncio.Task] = []
+    try:
+        async with _probe_lock:
+            async with httpx.AsyncClient(base_url=settings.mihomo_probe_url, headers=headers) as client:
+                try:
+                    reload_response = await client.put(
+                        "/configs",
+                        params={"force": "true"},
+                        json={"path": "", "payload": payload},
+                        timeout=20,
+                    )
+                    reload_response.raise_for_status()
+                except Exception as exc:
+                    logger.exception("Mihomo rejected probe configuration")
+                    yield event({"type": "error", "message": "Сервис проверки Mihomo недоступен или отклонил конфигурацию прокси"})
+                    return
+
+                yield event({"type": "ready"})
+                semaphore = asyncio.Semaphore(16)
+                tasks = [
+                    asyncio.create_task(_measure(client, semaphore, test_name, candidate_name, timeout))
+                    for test_name, candidate_name in mappings
+                ]
+                for completed, task in enumerate(asyncio.as_completed(tasks), start=1):
+                    result = await task
+                    results.append(result)
+                    yield event({"type": "result", "result": result, "completed": completed, "tested": len(names)})
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    results.sort(key=lambda item: (item["status"] != "ok", item["delay"] if item["delay"] is not None else 10**9, item["name"]))
+    best = next((item for item in results if item["status"] == "ok"), None)
+    successful = sum(item["status"] == "ok" for item in results)
+    logger.info("Completed route probe: %d/%d successful, best=%s", successful, len(names), best and best["name"])
+    yield event({
+        "type": "complete",
+        "best": best,
+        "tested": len(names),
+        "successful": successful,
+    })
