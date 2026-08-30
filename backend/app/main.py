@@ -1,18 +1,17 @@
 from datetime import datetime, timezone
 import base64
 from copy import deepcopy
-import secrets
 import re
 import yaml
 from urllib.parse import quote, unquote, urlparse
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, or_, select, text
 from sqlalchemy.orm import Session
 from .config import settings
 from .database import Base, engine, get_db
-from .models import Account, Profile, Setting, Subscription
+from .models import Account, Profile, Setting, Subscription, short_token, token
 from .schemas import CustomRuleSet, DefaultProfileTemplate, ImportRequest, LoginRequest, ProfileIn, ProfileUpdate, ProxyProbeRequest, SubscriptionUpdate
 from .probe_service import stream_proxy_routes
 from .security import current_account_id, make_session, require_admin
@@ -31,18 +30,48 @@ def name_from_url(url: str) -> str:
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(engine)
+    existing_columns = {column["name"] for column in inspect(engine).get_columns("profiles")}
+    with engine.begin() as connection:
+        if "short_slug" not in existing_columns:
+            connection.execute(text("ALTER TABLE profiles ADD COLUMN short_slug VARCHAR(24)"))
+        if "config_slug" not in existing_columns:
+            connection.execute(text("ALTER TABLE profiles ADD COLUMN config_slug VARCHAR(24)"))
+        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_profiles_short_slug ON profiles (short_slug)"))
+        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_profiles_config_slug ON profiles (config_slug)"))
     with Session(engine) as db:
         if not db.get(Setting, 1):
             db.add(Setting(id=1, default_modifications={"rules": [], "overrides": {}}))
         for sub in db.scalars(select(Subscription)).all():
             if re.fullmatch(r"Подписка \d+ узлов", sub.name):
                 sub.name = name_from_url(sub.source_url)
+        for profile in db.scalars(select(Profile)).all():
+            if not profile.short_slug:
+                profile.short_slug = unique_profile_token(db, Profile.short_slug)
+            if not profile.config_slug:
+                profile.config_slug = unique_profile_token(db, Profile.config_slug)
         db.commit()
 
 
+def unique_profile_token(db: Session, column) -> str:
+    while True:
+        value = short_token()
+        if not db.scalar(select(Profile.id).where(column == value)):
+            return value
+
+
 def serialize_profile(p: Profile):
-    return {"id": p.id, "name": p.name, "slug": p.slug, "enabled": p.enabled,
-            "modifications": p.modifications, "url": f"{settings.public_url}/sub/{p.slug}"}
+    return {
+        "id": p.id,
+        "name": p.name,
+        "slug": p.slug,
+        "short_slug": p.short_slug,
+        "config_slug": p.config_slug,
+        "enabled": p.enabled,
+        "modifications": p.modifications,
+        "url": f"{settings.public_url}/s/{p.short_slug}",
+        "config_url": f"{settings.public_url}/c/{p.config_slug}",
+        "legacy_url": f"{settings.public_url}/sub/{p.slug}",
+    }
 
 
 def serialize_subscription(s: Subscription, include_yaml=False):
@@ -237,10 +266,10 @@ def owned_profile(db: Session, profile_id: int, account_id: int):
     return p
 
 
-def public_profile(db: Session, slug: str) -> Profile:
+def public_profile(db: Session, identifier: str) -> Profile:
     profile = db.scalar(
         select(Profile).join(Subscription).where(
-            Profile.slug == slug,
+            or_(Profile.slug == identifier, Profile.short_slug == identifier),
             Profile.enabled.is_(True),
             Subscription.enabled.is_(True),
         )
@@ -277,7 +306,12 @@ def delete_profile(profile_id: int, account_id: int = Depends(current_account_id
 
 @app.post("/api/profiles/{profile_id}/rotate")
 def rotate_profile(profile_id: int, account_id: int = Depends(current_account_id), db: Session = Depends(get_db)):
-    p = owned_profile(db, profile_id, account_id); p.slug = secrets.token_urlsafe(32); db.commit(); return serialize_profile(p)
+    p = owned_profile(db, profile_id, account_id)
+    p.slug = token()
+    p.short_slug = unique_profile_token(db, Profile.short_slug)
+    p.config_slug = unique_profile_token(db, Profile.config_slug)
+    db.commit()
+    return serialize_profile(p)
 
 
 @app.get("/api/public/profile/{slug}")
@@ -314,20 +348,14 @@ async def public_profile_info(slug: str, db: Session = Depends(get_db)):
         "group_count": summary.get("group_count", 0),
         "rule_count": summary.get("rule_count", 0),
         "proxy_types": summary.get("proxy_types", []),
-        "subscription_url": f"{settings.public_url}/sub/{profile.slug}",
-        "yaml_url": f"{settings.public_url}/sub/{profile.slug}?format=yaml",
+        "subscription_url": f"{settings.public_url}/s/{profile.short_slug}",
+        "config_url": f"{settings.public_url}/c/{profile.config_slug}",
+        "legacy_url": f"{settings.public_url}/sub/{profile.slug}",
+        "yaml_url": f"{settings.public_url}/c/{profile.config_slug}",
     }
 
 
-@app.get("/sub/{slug}")
-async def public_subscription(slug: str, request: Request, format: str | None = None, db: Session = Depends(get_db)):
-    p = public_profile(db, slug)
-    if wants_subscription_page(request, format):
-        return RedirectResponse(
-            url=f"/subscription/{quote(slug, safe='')}",
-            status_code=307,
-            headers={"Cache-Control": "no-store", "Vary": "Accept, User-Agent"},
-        )
+async def render_public_subscription(p: Profile, db: Session) -> Response:
     sub = p.subscription
     try:
         raw, parsed, upstream_headers = await fetch_yaml(sub.source_url)
@@ -352,6 +380,44 @@ async def public_subscription(slug: str, request: Request, format: str | None = 
     response_headers["Profile-Title"] = f"base64:{encoded_title}"
     response_headers.setdefault("profile-update-interval", "24")
     return Response(rendered, media_type="text/yaml; charset=utf-8", headers=response_headers)
+
+
+@app.get("/s/{short_slug}")
+async def short_public_subscription(short_slug: str, request: Request, format: str | None = None, db: Session = Depends(get_db)):
+    p = public_profile(db, short_slug)
+    if wants_subscription_page(request, format):
+        return RedirectResponse(
+            url=f"/subscription/{quote(short_slug, safe='')}",
+            status_code=307,
+            headers={"Cache-Control": "no-store", "Vary": "Accept, User-Agent"},
+        )
+    return await render_public_subscription(p, db)
+
+
+@app.get("/c/{config_slug}")
+async def config_only_subscription(config_slug: str, db: Session = Depends(get_db)):
+    p = db.scalar(
+        select(Profile).join(Subscription).where(
+            Profile.config_slug == config_slug,
+            Profile.enabled.is_(True),
+            Subscription.enabled.is_(True),
+        )
+    )
+    if not p:
+        raise HTTPException(404, "Подписка не найдена или отключена")
+    return await render_public_subscription(p, db)
+
+
+@app.get("/sub/{slug}")
+async def public_subscription(slug: str, request: Request, format: str | None = None, db: Session = Depends(get_db)):
+    p = public_profile(db, slug)
+    if wants_subscription_page(request, format):
+        return RedirectResponse(
+            url=f"/subscription/{quote(slug, safe='')}",
+            status_code=307,
+            headers={"Cache-Control": "no-store", "Vary": "Accept, User-Agent"},
+        )
+    return await render_public_subscription(p, db)
 
 
 @app.get("/rule-sets/{name}.list")
@@ -474,7 +540,9 @@ def admin_delete_profile(profile_id: int, db: Session = Depends(get_db)):
 @app.post("/api/admin/profiles/{profile_id}/rotate", dependencies=[Depends(require_admin)])
 def admin_rotate_profile(profile_id: int, db: Session = Depends(get_db)):
     profile = admin_profile(db, profile_id)
-    profile.slug = secrets.token_urlsafe(32)
+    profile.slug = token()
+    profile.short_slug = unique_profile_token(db, Profile.short_slug)
+    profile.config_slug = unique_profile_token(db, Profile.config_slug)
     db.commit()
     return serialize_profile(profile)
 

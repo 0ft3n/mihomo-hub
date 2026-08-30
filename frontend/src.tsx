@@ -83,6 +83,8 @@ type Profile = {
   slug: string;
   enabled: boolean;
   modifications: any;
+  config_url?: string;
+  legacy_url?: string;
 };
 type Sub = {
   id: number;
@@ -282,6 +284,8 @@ type PublicProfileInfo = {
   rule_count: number;
   proxy_types: string[];
   subscription_url: string;
+  config_url: string;
+  legacy_url: string;
   yaml_url: string;
 };
 
@@ -333,6 +337,7 @@ function SubscriptionPage({ slug }: { slug: string }) {
   const [yamlText, setYamlText] = useState("");
   const [yamlLoading, setYamlLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [configCopied, setConfigCopied] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -362,6 +367,12 @@ function SubscriptionPage({ slug }: { slug: string }) {
     await navigator.clipboard.writeText(data.subscription_url);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
+  };
+  const copyConfig = async () => {
+    if (!data) return;
+    await navigator.clipboard.writeText(data.config_url);
+    setConfigCopied(true);
+    window.setTimeout(() => setConfigCopied(false), 1800);
   };
   const openYaml = async () => {
     setTab("yaml");
@@ -453,7 +464,7 @@ function SubscriptionPage({ slug }: { slug: string }) {
 
             <div className="publicSteps">
               <article><span>1</span><div><h3>Установите {selectedClient?.name}</h3><p>Скачайте актуальную версию клиента для {PUBLIC_PLATFORMS.find((item) => item.id === platform)?.label}.</p>{selectedClient?.href ? <a href={selectedClient.href} target="_blank" rel="noreferrer"><Download /> Скачать приложение <ExternalLink /></a> : <div className="publicInstalled"><Check /> Уже установлен</div>}</div></article>
-              <article><span>2</span><div><h3>Скопируйте ссылку</h3><p>Это персональный адрес профиля. Не публикуйте и не передавайте его другим людям.</p><div className="publicLinkBox"><code>{data.subscription_url}</code><button onClick={copySubscription}>{copied ? <Check /> : <Copy />}</button></div></div></article>
+              <article><span>2</span><div><h3>Скопируйте ссылку</h3><p>Универсальная ссылка подходит для импорта и открывает эту страницу в браузере. Не передавайте персональные ссылки другим людям.</p><div className="publicLinkGroup"><label><span>Универсальная</span><div className="publicLinkBox"><code>{data.subscription_url}</code><button onClick={copySubscription}>{copied ? <Check /> : <Copy />}</button></div></label><label><span>Только конфиг</span><div className="publicLinkBox"><code>{data.config_url}</code><button onClick={copyConfig}>{configCopied ? <Check /> : <Copy />}</button></div></label></div></div></article>
               <article><span>3</span><div><h3>Добавьте профиль</h3><p>Откройте раздел профилей в приложении, выберите импорт по URL и вставьте скопированную ссылку.</p><button className="publicPrimary" onClick={copySubscription}>{copied ? <Check /> : <Clipboard />} {copied ? "Ссылка скопирована" : "Скопировать для импорта"}</button></div></article>
             </div>
           </section>

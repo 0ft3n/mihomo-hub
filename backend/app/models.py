@@ -13,6 +13,10 @@ def token():
     return secrets.token_urlsafe(32)
 
 
+def short_token():
+    return secrets.token_urlsafe(9)
+
+
 class Account(Base):
     __tablename__ = "accounts"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -42,6 +46,8 @@ class Profile(Base):
     subscription_id: Mapped[int] = mapped_column(ForeignKey("subscriptions.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(160))
     slug: Mapped[str] = mapped_column(String(128), unique=True, default=token)
+    short_slug: Mapped[str | None] = mapped_column(String(24), unique=True, nullable=True, default=short_token)
+    config_slug: Mapped[str | None] = mapped_column(String(24), unique=True, nullable=True, default=short_token)
     modifications: Mapped[dict] = mapped_column(JSON, default=dict)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
