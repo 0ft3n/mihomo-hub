@@ -2880,7 +2880,7 @@ function Admin({
   return (
     <div className="page">
       <p className="sourceSummary">
-        {data.accounts} аккаунтов · {data.subscriptions} подписок · {data.profiles} профилей
+        {data.accounts} аккаунтов · {data.subscriptions.length} подписок · {data.profiles} профилей
       </p>
       <div className="editGrid">
         <section className="panel form">
