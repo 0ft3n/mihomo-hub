@@ -56,7 +56,7 @@ The position is the combination, not any single part — a neighboring tool has 
 
 - **Russian-only UI.** No i18n layer is planned. Interface copy is Russian; protocol and technical identifiers stay in Latin (VLESS, grpc, SNI, `overrides`). Russian pluralization is hand-written where needed.
 - **Dark-first, both themes real.** The teal-on-near-black dark theme is the identity. The light theme is a fully supported peer driven by the same custom properties, never a degraded afterthought.
-- **Single-file frontend.** The frontend stays `frontend/src.tsx` + `frontend/style.css` — no CSS framework, no component library. Styling is hand-written CSS with custom properties on `:root` and `html[data-theme=light]`. Monaco and lucide-react are the only UI dependencies.
+- **No framework, no component library.** Styling is hand-written CSS with custom properties on `:root` and `html[data-theme=light]`, in a single `frontend/style.css`. Monaco and lucide-react are the only UI dependencies. The frontend was a single `src.tsx` until 2026-09-09, when it was split by route into `src.tsx` (entry), `public.tsx`, `app.tsx`, and `shared.tsx` so the public hand-off page stops shipping the operator panel to recipients. New modules are added only for a payload or boundary reason of that kind, never for organisation alone.
 - **Small-scale self-host.** Built for one operator serving a handful of people. No billing, no user management, no multi-tenant or scale-out surfaces.
 - Security constraints that are product-visible: upstream URLs pointing at local/reserved IPs are refused, upstream responses are capped at 10 MB, and public profile URLs are random rather than guessable.
 

@@ -3,6 +3,8 @@ name: Mihomo Hub
 description: A glass control plane for Clash/Mihomo subscriptions — phosphor teal signal over an ink-cyan ground.
 colors:
   phosphor-teal: "#14b8a6"
+  accent-text-dark: "#2fd3bf"
+  accent-text-light: "#0b7268"
   phosphor-teal-deep: "#0d9488"
   phosphor-teal-lit: "#1cd1bd"
   phosphor-teal-shade: "#087e78"
@@ -157,7 +159,7 @@ components:
 
 Mihomo Hub looks like what it is: infrastructure you can see through. Translucent panels float above a faint technical grid, and the grid never fully disappears behind them — a 64px lattice bleeds through the public page, a `backdrop-filter: blur(16px)` header lets the page scroll underneath itself, and modal chrome frosts rather than blocks. The metaphor is a control plane rendered in glass: the machinery is visible, the interface is the pane you reach through to touch it.
 
-Depth is read from the surface stack, not from shadow. Everything rises out of an almost-black blue-green ground (`#071116`) through three progressively lighter tints, and lightness alone tells you what sits on top of what. Hairline borders draw the structure; large soft shadows are atmosphere, never the thing that separates a card from its background. This is why the system survives its light theme intact — the stack inverts to paper-white and the hierarchy still reads.
+Depth is read from the surface stack, not from shadow. Everything rises out of an almost-black blue-green ground (`#071116`) through three progressively lighter tints, and lightness alone tells you what sits on top of what. Hairline borders draw the structure; large soft shadows are atmosphere, never the thing that separates a card from its background. The stack inverts to paper-white and the neutral hierarchy still reads — but neutrals were the only half that inverted cleanly, and every accent and semantic colour needed its own light-theme peer before the light theme actually held.
 
 Color is scarce on purpose. The near-black is the resting state and phosphor teal is a lit trace across it, appearing only where something is genuinely live, selected, focused, or succeeding. The density is tight and instrument-like: 38px controls, 14px body, 10px uppercase labels, `ui-monospace` wherever the user is looking at real config. The register is an operator's console — not a consumer VPN app, and never a growth dashboard.
 
@@ -385,4 +387,5 @@ The live latency-measurement surface. A tinted container (`5% accent on --bg`, 3
 - **Don't** replace the mobile bottom rail with a hamburger drawer. Below 700px navigation stays permanently visible; hiding where-you-are behind a menu is wrong for this product.
 - **Don't** design in the consumer-VPN register: no giant glowing shield, no flag grids, no single hero connect-button, no reassurance copy. The operator wants controls, not comfort.
 - **Don't** add a CSS framework, utility classes, or a component library. The system is hand-written CSS custom properties in one stylesheet, and that is a durable constraint.
+- **Don't** colour text or a meaningful icon with `var(--accent)`. The bright accent is for fills, borders and glows; text and icons take `var(--accent-text)`, which has a real light-theme peer. `#14b8a6` is 2.49:1 on white and fails AA outright.
 - **Don't** ship a motion effect without confirming the `prefers-reduced-motion` block still neutralizes it.
