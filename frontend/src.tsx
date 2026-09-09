@@ -9,6 +9,7 @@ import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
 import {
   Activity,
+  AlertTriangle,
   ArrowDownToLine,
   ArrowUpToLine,
   Check,
@@ -32,6 +33,7 @@ import {
   LayoutDashboard,
   LogOut,
   Moon,
+  Pause,
   RefreshCw,
   Route,
   Save,
@@ -189,6 +191,103 @@ function catalogFromYaml(text = "") {
     return { proxies: [], groups: [], ruleProviders: [] };
   }
 }
+async function copyText(value: string) {
+  try {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // fall through to the selection-based path below
+  }
+  try {
+    const field = document.createElement("textarea");
+    field.value = value;
+    field.setAttribute("readonly", "");
+    field.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+    document.body.appendChild(field);
+    field.select();
+    const copied = document.execCommand("copy");
+    document.body.removeChild(field);
+    return copied;
+  } catch {
+    return false;
+  }
+}
+
+function useCopyAction() {
+  const [copiedKey, setCopiedKey] = useState("");
+  const [failed, setFailed] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const copy = async (value: string, key = "default") => {
+    const ok = await copyText(value);
+    setFailed(!ok);
+    setCopiedKey(ok ? key : "");
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      setCopiedKey("");
+      setFailed(false);
+    }, 1800);
+  };
+  return { copy, copiedKey, failed };
+}
+
+function useDialog(onClose: () => void, active = true) {
+  const ref = useRef<any>(null);
+  useEffect(() => {
+    if (!active) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const node = ref.current as HTMLElement | null;
+    node?.querySelector<HTMLElement>(
+      "input:not([type=hidden]),textarea,select,button:not(.modalClose),[href],[tabindex]:not([tabindex='-1'])",
+    )?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        // an open dropdown owns Escape first; closing the dialog would discard the edit
+        if (document.querySelector(".customSelect.open, .comboBox.open")) return;
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !node) return;
+      const focusable = [...node.querySelectorAll<HTMLElement>(
+        "input:not([type=hidden]):not(:disabled),textarea:not(:disabled),select:not(:disabled),button:not(:disabled),[href],[tabindex]:not([tabindex='-1'])",
+      )].filter((element) => element.offsetParent !== null || element === document.activeElement);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      opener?.focus?.();
+    };
+  }, [active]);
+  return ref;
+}
+
+function useDismiss(open: boolean, close: () => void) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        close();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [open]);
+}
+
 const token = () => localStorage.getItem("token");
 let activeRequests = 0;
 function emitLoading() {
@@ -336,8 +435,9 @@ function SubscriptionPage({ slug }: { slug: string }) {
   const [clientId, setClientId] = useState("koala");
   const [yamlText, setYamlText] = useState("");
   const [yamlLoading, setYamlLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [configCopied, setConfigCopied] = useState(false);
+  const { copy, copiedKey, failed: copyFailed } = useCopyAction();
+  const copied = copiedKey === "subscription";
+  const configCopied = copiedKey === "config";
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -362,18 +462,8 @@ function SubscriptionPage({ slug }: { slug: string }) {
     if (!availableClients.some((client) => client.id === clientId)) setClientId(availableClients[0]?.id || "flclash");
   }, [platform]);
 
-  const copySubscription = async () => {
-    if (!data) return;
-    await navigator.clipboard.writeText(data.subscription_url);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
-  };
-  const copyConfig = async () => {
-    if (!data) return;
-    await navigator.clipboard.writeText(data.config_url);
-    setConfigCopied(true);
-    window.setTimeout(() => setConfigCopied(false), 1800);
-  };
+  const copySubscription = () => data && copy(data.subscription_url, "subscription");
+  const copyConfig = () => data && copy(data.config_url, "config");
   const openYaml = async () => {
     setTab("yaml");
     if (!data || yamlText || yamlLoading) return;
@@ -413,7 +503,13 @@ function SubscriptionPage({ slug }: { slug: string }) {
         </a>
         <div className="publicHeaderActions">
           <button onClick={copySubscription}>{copied ? <Check /> : <Copy />}<span>{copied ? "Скопировано" : "Скопировать ссылку"}</span></button>
-          <button className="publicTheme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? <Sun /> : <Moon />}</button>
+          <button
+            className="publicTheme"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            aria-label={theme === "dark" ? "Включить светлую тему" : "Включить тёмную тему"}
+          >
+            {theme === "dark" ? <Sun /> : <Moon />}
+          </button>
         </div>
       </header>
 
@@ -426,8 +522,8 @@ function SubscriptionPage({ slug }: { slug: string }) {
 
         <section className="publicSubscriptionCard">
           <div className="publicSubIdentity">
-            <span className="publicStatusIcon"><Check /></span>
-            <div><small>ПРОФИЛЬ</small><b>{data.profile_name}</b><p>Активен · обновлён {new Date(data.updated_at).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p></div>
+            <span className={data.enabled ? "publicStatusIcon" : "publicStatusIcon off"}>{data.enabled ? <Check /> : <Pause />}</span>
+            <div><small>ПРОФИЛЬ</small><b>{data.profile_name}</b><p>{data.enabled ? "Активен" : "Отключён владельцем"} · обновлён {new Date(data.updated_at).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p></div>
           </div>
           <div className="publicStats">
             <div><Wifi /><span><small>Серверов</small><b>{data.proxy_count}</b></span></div>
@@ -464,17 +560,23 @@ function SubscriptionPage({ slug }: { slug: string }) {
 
             <div className="publicSteps">
               <article><span>1</span><div><h3>Установите {selectedClient?.name}</h3><p>Скачайте актуальную версию клиента для {PUBLIC_PLATFORMS.find((item) => item.id === platform)?.label}.</p>{selectedClient?.href ? <a href={selectedClient.href} target="_blank" rel="noreferrer"><Download /> Скачать приложение <ExternalLink /></a> : <div className="publicInstalled"><Check /> Уже установлен</div>}</div></article>
-              <article><span>2</span><div><h3>Скопируйте ссылку</h3><p>Универсальная ссылка подходит для импорта и открывает эту страницу в браузере. Не передавайте персональные ссылки другим людям.</p><div className="publicLinkGroup"><label><span>Универсальная</span><div className="publicLinkBox"><code>{data.subscription_url}</code><button onClick={copySubscription}>{copied ? <Check /> : <Copy />}</button></div></label><label><span>Только конфиг</span><div className="publicLinkBox"><code>{data.config_url}</code><button onClick={copyConfig}>{configCopied ? <Check /> : <Copy />}</button></div></label></div></div></article>
+              <article><span>2</span><div><h3>Скопируйте ссылку</h3><p>Универсальная ссылка подходит для импорта и открывает эту страницу в браузере. Не передавайте персональные ссылки другим людям.</p><div className="publicLinkGroup"><label><span>Универсальная</span><div className="publicLinkBox"><code>{data.subscription_url}</code><button onClick={copySubscription} aria-label="Скопировать универсальную ссылку">{copied ? <Check /> : <Copy />}</button></div></label><label><span>Только конфиг</span><div className="publicLinkBox"><code>{data.config_url}</code><button onClick={copyConfig} aria-label="Скопировать ссылку только на конфиг">{configCopied ? <Check /> : <Copy />}</button></div></label></div></div></article>
               <article><span>3</span><div><h3>Добавьте профиль</h3><p>Откройте раздел профилей в приложении, выберите импорт по URL и вставьте скопированную ссылку.</p><button className="publicPrimary" onClick={copySubscription}>{copied ? <Check /> : <Clipboard />} {copied ? "Ссылка скопирована" : "Скопировать для импорта"}</button></div></article>
             </div>
           </section>
         ) : (
           <section className="publicYamlCard">
-            <div className="publicYamlHead"><div><FileText /><span><b>{data.profile_name}.yaml</b><small>Текущая конфигурация подписки</small></span></div><div><button onClick={() => navigator.clipboard.writeText(yamlText)}><Copy /> Копировать</button><a href={data.yaml_url} target="_blank" rel="noreferrer"><ExternalLink /> Raw</a></div></div>
+            <div className="publicYamlHead"><div><FileText /><span><b>{data.profile_name}.yaml</b><small>Текущая конфигурация подписки</small></span></div><div><button onClick={() => copy(yamlText, "yaml")} disabled={!yamlText}>{copiedKey === "yaml" ? <Check /> : <Copy />} {copiedKey === "yaml" ? "Скопировано" : "Копировать"}</button><a href={data.yaml_url} target="_blank" rel="noreferrer"><ExternalLink /> Raw</a></div></div>
             <div className="publicYamlEditor">
-              {yamlLoading ? <div className="publicYamlLoading"><RefreshCw className="spin" /> Загружаем конфигурацию…</div> : <MonacoEditor height="520px" language="yaml" theme="vs-dark" value={yamlText} options={{ readOnly: true, minimap: { enabled: true }, fontSize: 12, lineHeight: 20, scrollBeyondLastLine: false, wordWrap: "off", automaticLayout: true }} />}
+              {yamlLoading ? <div className="publicYamlLoading"><RefreshCw className="spin" /> Загружаем конфигурацию…</div> : <MonacoEditor height="520px" language="yaml" theme={theme === "light" ? "light" : "vs-dark"} value={yamlText} options={{ readOnly: true, minimap: { enabled: true }, fontSize: 12, lineHeight: 20, scrollBeyondLastLine: false, wordWrap: "off", automaticLayout: true }} />}
             </div>
           </section>
+        )}
+
+        {copyFailed && (
+          <div className="publicCopyFallback" role="alert">
+            <AlertTriangle /> Браузер не дал скопировать автоматически — выделите ссылку и скопируйте вручную.
+          </div>
         )}
 
         <footer className="publicFooter"><span><Shield /> Ссылка защищена случайным токеном</span><span>Mihomo Hub · современное управление подписками</span></footer>
@@ -494,6 +596,9 @@ function App() {
   const [addOpen, setAddOpen] = useState(false);
   const [newSubscriptionUrl, setNewSubscriptionUrl] = useState("");
   const [addError, setAddError] = useState("");
+  const addDialogRef = useDialog(() => {
+    if (!networkBusy) setAddOpen(false);
+  }, addOpen);
   useEffect(() => {
     const listener = (event: Event) =>
       setNetworkBusy((event as CustomEvent<boolean>).detail);
@@ -627,6 +732,10 @@ function App() {
         >
           <form
             className="subscriptionModal"
+            ref={addDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-subscription-title"
             onSubmit={async (e) => {
               e.preventDefault();
               setAddError("");
@@ -654,7 +763,7 @@ function App() {
             <div className="modalIcon">
               <CirclePlus />
             </div>
-            <h2>Добавить подписку</h2>
+            <h2 id="add-subscription-title">Добавить подписку</h2>
             <p>
               Вставьте ссылку Clash Meta/Mihomo. Мы проверим конфигурацию и
               создадим первый профиль.
@@ -673,7 +782,7 @@ function App() {
                 />
               </div>
             </label>
-            {addError && <div className="error modalError">{addError}</div>}
+            {addError && <div className="error modalError" role="alert">{addError}</div>}
             <div className="modalActions">
               <button type="button" onClick={() => setAddOpen(false)}>
                 Отмена
@@ -701,12 +810,15 @@ function SelectField({
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.value === value);
+  useDismiss(open, () => setOpen(false));
   return (
     <div className={open ? "customSelect open" : "customSelect"}>
       {open && (
         <button
           type="button"
           className="selectDismiss"
+          tabIndex={-1}
+          aria-hidden="true"
           onClick={() => setOpen(false)}
         />
       )}
@@ -714,6 +826,7 @@ function SelectField({
         type="button"
         className="selectTrigger"
         aria-expanded={open}
+        aria-haspopup="listbox"
         onClick={() => setOpen(!open)}
       >
         <span>{selected?.label || value}</span>
@@ -758,6 +871,7 @@ function Combobox({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  useDismiss(open, () => setOpen(false));
   const filtered = options
     .filter((option) => option.toLowerCase().includes(query.toLowerCase()))
     .slice(0, 80);
@@ -767,6 +881,8 @@ function Combobox({
         <button
           type="button"
           className="selectDismiss"
+          tabIndex={-1}
+          aria-hidden="true"
           onClick={() => setOpen(false)}
         />
       )}
@@ -774,6 +890,9 @@ function Combobox({
         <input
           value={value}
           placeholder={placeholder}
+          role="combobox"
+          aria-expanded={open}
+          aria-autocomplete="list"
           onFocus={() => {
             setQuery("");
             setOpen(true);
@@ -786,6 +905,8 @@ function Combobox({
         />
         <button
           type="button"
+          tabIndex={-1}
+          aria-label={open ? "Скрыть варианты" : "Показать варианты"}
           onClick={() => {
             setQuery("");
             setOpen(!open);
@@ -795,11 +916,13 @@ function Combobox({
         </button>
       </div>
       {open && (
-        <div className="selectMenu comboMenu">
+        <div className="selectMenu comboMenu" role="listbox">
           {filtered.length ? (
             filtered.map((option) => (
               <button
                 type="button"
+                role="option"
+                aria-selected={option === value}
                 className={option === value ? "selected" : ""}
                 key={option}
                 onClick={() => {
@@ -861,7 +984,11 @@ function Welcome({
   }
   return (
     <div className="welcome">
-      <button className="theme" onClick={flip}>
+      <button
+        className="theme"
+        onClick={flip}
+        aria-label={theme === "dark" ? "Включить светлую тему" : "Включить тёмную тему"}
+      >
         {theme === "dark" ? <Sun /> : <Moon />}
       </button>
       <div className="welcomeCard">
@@ -881,21 +1008,22 @@ function Welcome({
           профилями и конфигурацией в одном месте.
         </p>
         <form onSubmit={go}>
-          <label>Ссылка на подписку</label>
+          <label htmlFor="welcome-subscription-url">Ссылка на подписку</label>
           <div className="urlInput">
             <Globe2 />
             <input
+              id="welcome-subscription-url"
               required
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://provider.example/subscription"
             />
-            <button disabled={busy}>
+            <button disabled={busy} aria-label="Подключить подписку">
               {busy ? <RefreshCw className="spin" /> : <ChevronRight />}
             </button>
           </div>
-          {err && <div className="error">{err}</div>}
+          {err && <div className="error" role="alert">{err}</div>}
           <small>
             <Shield /> Ссылка шифруется и используется только для обновления
             конфигурации
@@ -938,6 +1066,23 @@ function Subscription({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const deleteDialogRef = useDialog(() => {
+    if (!deleting) setDeleteOpen(false);
+  }, deleteOpen);
+  const [actionError, setActionError] = useState("");
+  const [busyAction, setBusyAction] = useState("");
+  const { copy, copiedKey, failed: copyFailed } = useCopyAction();
+  const run = async (name: string, action: () => Promise<void>) => {
+    setActionError("");
+    setBusyAction(name);
+    try {
+      await action();
+    } catch (error: any) {
+      setActionError(error.message || "Не удалось выполнить действие");
+    } finally {
+      setBusyAction("");
+    }
+  };
   const request = (path: string, options: any = {}) =>
     api(`${adminPassword ? "/admin" : ""}${path}`, {
       ...options,
@@ -1054,7 +1199,12 @@ function Subscription({
               name="Правил"
               value={data.source_meta.rule_count}
             />
-            <Metric icon={<Activity />} name="Статус" value="Активна" good />
+            <Metric
+              icon={<Activity />}
+              name="Статус"
+              value={data.enabled ? "Активна" : "Отключена"}
+              good={data.enabled}
+            />
           </section>
           <SubscriptionUsage info={data.source_meta.subscription} />
           <section className="panel source">
@@ -1066,6 +1216,7 @@ function Subscription({
                 {renaming ? (
                   <input
                     className="sourceNameInput"
+                    aria-label="Название подписки"
                     value={subscriptionName}
                     maxLength={160}
                     autoFocus
@@ -1089,16 +1240,19 @@ function Subscription({
                   <button
                     className="resetName"
                     title="Вернуть название из исходной подписки"
-                    onClick={async () => {
-                      const updated = await request(
-                        `/subscriptions/${sub.id}/reset-name`,
-                        { method: "POST" },
-                      );
-                      setSubscriptionName(updated.name);
-                      setFull({ ...data, ...updated, yaml: data.yaml });
-                      setRenaming(false);
-                      reload();
-                    }}
+                    disabled={!!busyAction}
+                    onClick={() =>
+                      run("reset", async () => {
+                        const updated = await request(
+                          `/subscriptions/${sub.id}/reset-name`,
+                          { method: "POST" },
+                        );
+                        setSubscriptionName(updated.name);
+                        setFull({ ...data, ...updated, yaml: data.yaml });
+                        setRenaming(false);
+                        reload();
+                      })
+                    }
                   >
                     <RefreshCw /> Сбросить к исходному
                   </button>
@@ -1112,18 +1266,21 @@ function Subscription({
                   </button>
                   <button
                     className="primary"
-                    disabled={!subscriptionName.trim()}
-                    onClick={async () => {
-                      const updated = await request(`/subscriptions/${sub.id}`, {
-                        method: "PATCH",
-                        body: JSON.stringify({ name: subscriptionName.trim() }),
-                      });
-                      setFull({ ...data, ...updated, yaml: data.yaml });
-                      setRenaming(false);
-                      reload();
-                    }}
+                    disabled={!subscriptionName.trim() || !!busyAction}
+                    onClick={() =>
+                      run("rename", async () => {
+                        const updated = await request(`/subscriptions/${sub.id}`, {
+                          method: "PATCH",
+                          body: JSON.stringify({ name: subscriptionName.trim() }),
+                        });
+                        setFull({ ...data, ...updated, yaml: data.yaml });
+                        setRenaming(false);
+                        reload();
+                      })
+                    }
                   >
-                    <Save /> Сохранить имя
+                    {busyAction === "rename" ? <RefreshCw className="spin" /> : <Save />}
+                    {busyAction === "rename" ? "Сохраняем…" : "Сохранить имя"}
                   </button>
                 </>
               ) : (
@@ -1132,17 +1289,21 @@ function Subscription({
                 </button>
               )}
               <button
-                onClick={async () => {
-                  const refreshed = await request(
-                    `/subscriptions/${sub.id}/refresh`,
-                    { method: "POST" },
-                  );
-                  setFull(refreshed);
-                  setSubscriptionName(refreshed.name);
-                  reload();
-                }}
+                disabled={!!busyAction}
+                onClick={() =>
+                  run("refresh", async () => {
+                    const refreshed = await request(
+                      `/subscriptions/${sub.id}/refresh`,
+                      { method: "POST" },
+                    );
+                    setFull(refreshed);
+                    setSubscriptionName(refreshed.name);
+                    reload();
+                  })
+                }
               >
-                <RefreshCw /> Обновить
+                <RefreshCw className={busyAction === "refresh" ? "spin" : ""} />
+                {busyAction === "refresh" ? "Обновляем…" : "Обновить"}
               </button>
               <button
                 className="dangerButton"
@@ -1155,6 +1316,11 @@ function Subscription({
               </button>
             </div>
           </section>
+          {(actionError || copyFailed) && (
+            <div className="error panelError" role="alert">
+              {actionError || "Браузер не дал скопировать автоматически — выделите ссылку и скопируйте вручную."}
+            </div>
+          )}
           <div className="sectionTitle">
             <div>
               <h3>Профили конфигурации</h3>
@@ -1162,21 +1328,24 @@ function Subscription({
             </div>
             <button
               className="primary"
-              onClick={async () => {
-                const p = await request(`/subscriptions/${sub.id}/profiles`, {
-                  method: "POST",
-                  body: JSON.stringify({
-                    name: `Новый профиль ${data.profiles.length + 1}`,
-                    modifications: { rules: [], overrides: {} },
-                  }),
-                });
-                await reload();
-                const updated = await request(`/subscriptions/${sub.id}`);
-                setFull(updated);
-                setEdit(p);
-              }}
+              disabled={!!busyAction}
+              onClick={() =>
+                run("profile", async () => {
+                  const created = await request(`/subscriptions/${sub.id}/profiles`, {
+                    method: "POST",
+                    body: JSON.stringify({
+                      name: `Новый профиль ${data.profiles.length + 1}`,
+                      modifications: { rules: [], overrides: {} },
+                    }),
+                  });
+                  await reload();
+                  const updated = await request(`/subscriptions/${sub.id}`);
+                  setFull(updated);
+                  setEdit(created);
+                })
+              }
             >
-              <CirclePlus />
+              {busyAction === "profile" ? <RefreshCw className="spin" /> : <CirclePlus />}
               Новый профиль
             </button>
           </div>
@@ -1187,8 +1356,8 @@ function Subscription({
                   <span className="device">
                     <Settings />
                   </span>
-                  <span className="activeTag">
-                    <i /> Активен
+                  <span className={p.enabled ? "activeTag" : "activeTag off"}>
+                    <i /> {p.enabled ? "Активен" : "Отключён"}
                   </span>
                 </div>
                 <h3>{p.name}</h3>
@@ -1199,8 +1368,11 @@ function Subscription({
                 </p>
                 <div className="link">
                   <code>{p.url}</code>
-                  <button onClick={() => navigator.clipboard.writeText(p.url)}>
-                    <Clipboard />
+                  <button
+                    onClick={() => copy(p.url, `profile-${p.id}`)}
+                    aria-label={`Скопировать ссылку профиля «${p.name}»`}
+                  >
+                    {copiedKey === `profile-${p.id}` ? <Check /> : <Clipboard />}
                   </button>
                 </div>
                 <div className="profileBtns">
@@ -1208,7 +1380,12 @@ function Subscription({
                     <FileCog />
                     Настроить
                   </button>
-                  <a href={p.url} target="_blank">
+                  <a
+                    href={p.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Открыть ссылку профиля «${p.name}» в новой вкладке`}
+                  >
                     <ExternalLink />
                   </a>
                 </div>
@@ -1225,6 +1402,7 @@ function Subscription({
             >
               <div
                 className="subscriptionModal deleteSubscriptionModal"
+                ref={deleteDialogRef}
                 role="alertdialog"
                 aria-modal="true"
                 aria-labelledby="delete-subscription-title"
@@ -1246,7 +1424,7 @@ function Subscription({
                   Подписка <b>«{data.name}»</b>, все её профили и выданные
                   публичные ссылки будут удалены без возможности восстановления.
                 </p>
-                {deleteError && <div className="error modalError">{deleteError}</div>}
+                {deleteError && <div className="error modalError" role="alert">{deleteError}</div>}
                 <div className="modalActions">
                   <button
                     type="button"
@@ -1390,6 +1568,7 @@ function SubscriptionUsage({ info }: { info?: any }) {
   );
 }
 function Yaml({ text }: { text: string }) {
+  const { copy, copiedKey } = useCopyAction();
   return (
     <section className="panel yaml">
       <div className="yamlHead">
@@ -1397,9 +1576,9 @@ function Yaml({ text }: { text: string }) {
           <Code2 />
           <h3>Исходная конфигурация</h3>
         </div>
-        <button onClick={() => navigator.clipboard.writeText(text)}>
-          <Clipboard />
-          Копировать
+        <button onClick={() => copy(text)} disabled={!text}>
+          {copiedKey ? <Check /> : <Clipboard />}
+          {copiedKey ? "Скопировано" : "Копировать"}
         </button>
       </div>
       <pre>{text}</pre>
@@ -1603,6 +1782,9 @@ function CustomProxyModal({
   const [probing, setProbing] = useState(false);
   const [probeData, setProbeData] = useState<ProxyProbeResponse>();
   const [probeError, setProbeError] = useState("");
+  const dialogRef = useDialog(() => {
+    if (!probing) close();
+  });
   useEffect(() => {
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -1752,10 +1934,16 @@ function CustomProxyModal({
   const probeCompleted = probeData?.results.filter((result) => result.status !== "pending").length || 0;
   return createPortal(
     <div className="modalBackdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="subscriptionModal customProxyModal">
+      <div
+        className="subscriptionModal customProxyModal"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="custom-proxy-title"
+      >
         <button className="modalClose" aria-label="Закрыть" onClick={close}><X /></button>
         <div className="modalIcon"><Server /></div>
-        <h2>{initial.proxy.server ? "Настройка сервера" : "Новый прокси-сервер"}</h2>
+        <h2 id="custom-proxy-title">{initial.proxy.server ? "Настройка сервера" : "Новый прокси-сервер"}</h2>
         <p>Параметры попадут в секцию <code>proxies</code> итоговой подписки.</p>
         <div className="composerTabs proxyModeTabs">
           <button className={mode === "builder" ? "active" : ""} onClick={() => switchMode("builder")}><Settings /> Конструктор</button>
@@ -2549,11 +2737,13 @@ function Editor({
               </button>
               <input
                 value={r}
+                aria-label={`Правило ${i + 1}`}
                 onChange={(e) =>
                   setRules(rules.map((x, j) => (j === i ? e.target.value : x)))
                 }
               />
               <button
+                aria-label={`Удалить правило ${i + 1}`}
                 onClick={() => {
                   setRules(rules.filter((_, j) => j !== i));
                   setRuleIds(ruleIds.filter((_, j) => j !== i));
@@ -2623,7 +2813,7 @@ function Editor({
               />
             </div>
           </div>
-          {err && <div className="error">{err}</div>}
+          {err && <div className="error" role="alert">{err}</div>}
           <div className="callout">
             <Shield />
             <div>
