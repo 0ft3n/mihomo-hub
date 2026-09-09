@@ -8,6 +8,7 @@ import React, {
 import { createPortal } from "react-dom";
 import {
   Activity,
+  AlertTriangle,
   ArrowDownToLine,
   ArrowUpToLine,
   Check,
@@ -16,6 +17,7 @@ import {
   CirclePlus,
   Clipboard,
   Code2,
+  Copy,
   Database,
   ExternalLink,
   FileCog,
@@ -252,10 +254,13 @@ async function api(path: string, options: any = {}) {
         ...options.headers,
       },
     });
-    if (!r.ok)
-      throw new Error(
+    if (!r.ok) {
+      const failure: any = new Error(
         (await r.json().catch(() => ({}))).detail || "Ошибка запроса",
       );
+      failure.status = r.status;
+      throw failure;
+    }
     return r.status === 204 ? null : r.json();
   } finally {
     activeRequests = Math.max(activeRequests - 1, 0);
@@ -321,9 +326,17 @@ export default function App() {
   const [addOpen, setAddOpen] = useState(false);
   const [newSubscriptionUrl, setNewSubscriptionUrl] = useState("");
   const [addError, setAddError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [keyOpen, setKeyOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [keyShown, setKeyShown] = useState(false);
+  const accountKey = localStorage.getItem("account_key") || "";
+  const { copy, copiedKey } = useCopyAction();
   const addDialogRef = useDialog(() => {
     if (!networkBusy) setAddOpen(false);
   }, addOpen);
+  const keyDialogRef = useDialog(() => setKeyOpen(false), keyOpen);
+  const logoutDialogRef = useDialog(() => setLogoutOpen(false), logoutOpen);
   useEffect(() => {
     const listener = (event: Event) =>
       setNetworkBusy((event as CustomEvent<boolean>).detail);
@@ -345,13 +358,24 @@ export default function App() {
             : subscriptions[0]?.id,
         );
       })
-      .catch(() => {
-        localStorage.removeItem("token");
-        setAuthed(false);
+      .catch((error: any) => {
+        if (error?.status === 401 || error?.status === 403) {
+          localStorage.removeItem("token");
+          setAuthed(false);
+          return;
+        }
+        setLoadError(error?.message || "Не удалось загрузить подписки");
       });
   useEffect(() => {
     if (authed) load();
   }, [authed]);
+  const activeSub = subs.find((s) => s.id === active);
+  const sectionTitle = admin
+    ? "Администрирование"
+    : activeSub?.name || "Ваши подписки";
+  useEffect(() => {
+    if (authed) document.title = `${sectionTitle} — Mihomo Hub`;
+  }, [authed, sectionTitle]);
   if (!authed)
     return (
       <Welcome
@@ -361,12 +385,6 @@ export default function App() {
       />
     );
   const sub = subs.find((s) => s.id === active);
-  const sectionTitle = admin
-    ? "Администрирование"
-    : sub?.name || "Ваши подписки";
-  useEffect(() => {
-    document.title = `${sectionTitle} — Mihomo Hub`;
-  }, [sectionTitle]);
   return (
     <div className="shell">
       <a className="skipLink" href="#main">
@@ -421,12 +439,11 @@ export default function App() {
             {theme === "dark" ? <Sun /> : <Moon />}
             {theme === "dark" ? "Светлая тема" : "Тёмная тема"}
           </button>
-          <button
-            onClick={() => {
-              localStorage.clear();
-              setAuthed(false);
-            }}
-          >
+          <button onClick={() => { setKeyShown(false); setKeyOpen(true); }}>
+            <KeyRound />
+            Ключ доступа
+          </button>
+          <button onClick={() => { setKeyShown(false); setLogoutOpen(true); }}>
             <LogOut />
             Выйти
           </button>
@@ -435,13 +452,31 @@ export default function App() {
       <main id="main" tabIndex={-1}>
         <header>
           <div>
-            <small>ПАНЕЛЬ УПРАВЛЕНИЯ</small>
             <h1>{sectionTitle}</h1>
           </div>
-          <div className="status">
-            <i /> Сервис работает
+          <div
+            className={loadError ? "status down" : "status"}
+            role="status"
+            aria-live="polite"
+          >
+            {loadError ? <AlertTriangle /> : <i />}
+            {loadError ? "Нет связи с сервером" : "Сервис работает"}
           </div>
         </header>
+        {loadError && (
+          <div className="page">
+            <div className="error panelError" role="alert">
+              {loadError}{" "}
+              <button
+                type="button"
+                className="inlineRetry"
+                onClick={() => { setLoadError(""); load(); }}
+              >
+                Повторить
+              </button>
+            </div>
+          </div>
+        )}
         {admin ? (
           <Admin key="admin" onRuleSetsChange={setCustomRuleSets} />
         ) : sub ? (
@@ -455,6 +490,63 @@ export default function App() {
           <Empty />
         )}
       </main>
+      {keyOpen && createPortal(
+        <div className="modalBackdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setKeyOpen(false); }}>
+          <div className="subscriptionModal" ref={keyDialogRef} role="dialog" aria-modal="true" aria-labelledby="key-title">
+            <button type="button" className="modalClose" aria-label="Закрыть" onClick={() => setKeyOpen(false)}><X /></button>
+            <div className="modalIcon"><KeyRound /></div>
+            <h2 id="key-title">Ключ доступа</h2>
+            <p>Это единственный способ восстановить кабинет. Сохраните его в менеджере паролей — мы не сможем выдать его повторно.</p>
+            <div className="keyBox">
+              <code>{keyShown ? accountKey || "—" : "•".repeat(Math.min(accountKey.length, 40) || 24)}</code>
+              <button type="button" onClick={() => setKeyShown(!keyShown)} aria-label={keyShown ? "Скрыть ключ" : "Показать ключ"}>
+                {keyShown ? <Moon /> : <Sun />}
+              </button>
+              <button type="button" onClick={() => copy(accountKey, "account-key")} disabled={!accountKey} aria-label="Скопировать ключ доступа">
+                {copiedKey === "account-key" ? <Check /> : <Copy />}
+              </button>
+            </div>
+            <div className="modalActions">
+              <button type="button" className="primary" onClick={() => setKeyOpen(false)}>Готово</button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+      {logoutOpen && createPortal(
+        <div className="modalBackdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setLogoutOpen(false); }}>
+          <div className="subscriptionModal" ref={logoutDialogRef} role="alertdialog" aria-modal="true" aria-labelledby="logout-title">
+            <button type="button" className="modalClose" aria-label="Закрыть" onClick={() => setLogoutOpen(false)}><X /></button>
+            <div className="modalIcon dangerModalIcon"><LogOut /></div>
+            <h2 id="logout-title">Выйти из кабинета?</h2>
+            <p>Без ключа доступа вернуться будет невозможно: подписки, профили и все выданные ссылки останутся недоступны. Скопируйте ключ перед выходом.</p>
+            <div className="keyBox">
+              <code>{keyShown ? accountKey || "—" : "•".repeat(Math.min(accountKey.length, 40) || 24)}</code>
+              <button type="button" onClick={() => setKeyShown(!keyShown)} aria-label={keyShown ? "Скрыть ключ" : "Показать ключ"}>
+                {keyShown ? <Moon /> : <Sun />}
+              </button>
+              <button type="button" onClick={() => copy(accountKey, "logout-key")} disabled={!accountKey} aria-label="Скопировать ключ доступа">
+                {copiedKey === "logout-key" ? <Check /> : <Copy />}
+              </button>
+            </div>
+            <div className="modalActions">
+              <button type="button" onClick={() => setLogoutOpen(false)}>Отмена</button>
+              <button
+                type="button"
+                className="deleteConfirmButton"
+                onClick={() => {
+                  localStorage.removeItem("token");
+                  setLogoutOpen(false);
+                  setAuthed(false);
+                }}
+              >
+                <LogOut /> Выйти
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
       {addOpen && (
         <div
           className="modalBackdrop"
@@ -693,6 +785,28 @@ function Welcome({
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [mode, setMode] = useState<"import" | "key">("import");
+  const [accessKey, setAccessKey] = useState("");
+  async function restore(e: any) {
+    e.preventDefault();
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await fetch(
+        `${API}/auth/key?key=${encodeURIComponent(accessKey.trim())}`,
+        { method: "POST" },
+      );
+      const d = await r.json();
+      if (!r.ok) throw Error(d.detail);
+      localStorage.setItem("token", d.token);
+      localStorage.setItem("account_key", accessKey.trim());
+      onDone();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function go(e: any) {
     e.preventDefault();
     setBusy(true);
@@ -724,12 +838,6 @@ function Welcome({
         {theme === "dark" ? <Sun /> : <Moon />}
       </button>
       <div className="welcomeCard">
-        <div className="heroLogo">
-          <Route />
-        </div>
-        <div className="pill">
-          <i /> SELF-HOSTED CONTROL PLANE
-        </div>
         <h1>
           Ваша подписка.
           <br />
@@ -739,6 +847,29 @@ function Welcome({
           Подключите Clash/Mihomo-подписку и управляйте маршрутизацией,
           профилями и конфигурацией в одном месте.
         </p>
+        {mode === "key" ? (
+        <form onSubmit={restore}>
+          <label htmlFor="welcome-access-key">Ключ доступа</label>
+          <div className="urlInput">
+            <KeyRound />
+            <input
+              id="welcome-access-key"
+              required
+              autoFocus
+              value={accessKey}
+              onChange={(e) => setAccessKey(e.target.value)}
+              placeholder="Ключ, выданный при первом входе"
+            />
+            <button disabled={busy} aria-label="Восстановить кабинет">
+              {busy ? <RefreshCw className="spin" /> : <ChevronRight />}
+            </button>
+          </div>
+          {err && <div className="error" role="alert">{err}</div>}
+          <button type="button" className="welcomeSwitch" onClick={() => { setMode("import"); setErr(""); }}>
+            Подключить новую подписку
+          </button>
+        </form>
+        ) : (
         <form onSubmit={go}>
           <label htmlFor="welcome-subscription-url">Ссылка на подписку</label>
           <div className="urlInput">
@@ -760,7 +891,11 @@ function Welcome({
             <Shield /> Ссылка шифруется и используется только для обновления
             конфигурации
           </small>
+          <button type="button" className="welcomeSwitch" onClick={() => { setMode("key"); setErr(""); }}>
+            У меня есть ключ доступа
+          </button>
         </form>
+        )}
       </div>
       <div className="welcomeFoot">
         <span>
@@ -915,29 +1050,13 @@ function Subscription({
         <Yaml text={data.yaml || ""} />
       ) : (
         <>
-          <section className="metrics">
-            <Metric
-              icon={<Server />}
-              name="Прокси-серверов"
-              value={data.source_meta.proxy_count}
-            />
-            <Metric
-              icon={<Route />}
-              name="Групп маршрутизации"
-              value={data.source_meta.group_count}
-            />
-            <Metric
-              icon={<FileCog />}
-              name="Правил"
-              value={data.source_meta.rule_count}
-            />
-            <Metric
-              icon={<Activity />}
-              name="Статус"
-              value={data.enabled ? "Активна" : "Отключена"}
-              good={data.enabled}
-            />
-          </section>
+          <p className="sourceSummary">
+            {data.source_meta.proxy_count} серверов · {data.source_meta.group_count} групп ·{" "}
+            {data.source_meta.rule_count} правил ·{" "}
+            <b className={data.enabled ? "good" : ""}>
+              {data.enabled ? "Активна" : "Отключена"}
+            </b>
+          </p>
           <SubscriptionUsage info={data.source_meta.subscription} />
           <section className="panel source">
             <div>
@@ -1198,17 +1317,6 @@ function Subscription({
   );
 }
 
-function Metric({ icon, name, value, good = false }: any) {
-  return (
-    <div className="metric">
-      <span>{icon}</span>
-      <div>
-        <b className={good ? "good" : ""}>{value}</b>
-        <small>{name}</small>
-      </div>
-    </div>
-  );
-}
 function SubscriptionUsage({ info }: { info?: any }) {
   if (!info) {
     return (
@@ -2482,7 +2590,7 @@ function Editor({
           </p>
           <div className="overrideWorkspace">
             <aside className="overrideKeys">
-              <div className="overrideKeysTitle">КЛЮЧИ КОНФИГА</div>
+              <div className="overrideKeysTitle">Ключи конфига</div>
               <input
                 value={overrideSearch}
                 onChange={(e) => setOverrideSearch(e.target.value)}
@@ -2702,15 +2810,9 @@ function Admin({
     );
   return (
     <div className="page">
-      <section className="metrics">
-        <Metric icon={<Database />} name="Аккаунтов" value={data.accounts} />
-        <Metric
-          icon={<Server />}
-          name="Подписок"
-          value={data.subscriptions.length}
-        />
-        <Metric icon={<FileCog />} name="Профилей" value={data.profiles} />
-      </section>
+      <p className="sourceSummary">
+        {data.accounts} аккаунтов · {data.subscriptions} подписок · {data.profiles} профилей
+      </p>
       <div className="editGrid">
         <section className="panel form">
           <h3>Все подписки</h3>

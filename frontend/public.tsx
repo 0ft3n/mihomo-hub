@@ -44,13 +44,7 @@ type PublicProfileInfo = {
 };
 
 const PUBLIC_CLIENTS = [
-  {
-    id: "koala",
-    name: "Koala Clash",
-    platforms: ["windows", "macos", "linux"],
-    href: "",
-    accent: "#50d4c5",
-  },
+  
   {
     id: "verge",
     name: "Clash Verge Rev",
@@ -87,7 +81,7 @@ export default function SubscriptionPage({ slug }: { slug: string }) {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [tab, setTab] = useState<"install" | "yaml">("install");
   const [platform, setPlatform] = useState("windows");
-  const [clientId, setClientId] = useState("koala");
+  const [clientId, setClientId] = useState("verge");
   const [yamlText, setYamlText] = useState("");
   const [yamlLoading, setYamlLoading] = useState(false);
   const { copy, copiedKey, failed: copyFailed } = useCopyAction();
@@ -170,7 +164,6 @@ export default function SubscriptionPage({ slug }: { slug: string }) {
 
       <main className="publicContent">
         <section className="publicHero">
-          <div className="publicEyebrow"><i /> Безопасная подписка Mihomo</div>
           <h1>{data.title}</h1>
           <p>Готовая конфигурация для ваших устройств. Установите клиент, добавьте ссылку и подключайтесь.</p>
         </section>
@@ -178,7 +171,7 @@ export default function SubscriptionPage({ slug }: { slug: string }) {
         <section className="publicSubscriptionCard">
           <div className="publicSubIdentity">
             <span className={data.enabled ? "publicStatusIcon" : "publicStatusIcon off"}>{data.enabled ? <Check /> : <Pause />}</span>
-            <div><small>ПРОФИЛЬ</small><b>{data.profile_name}</b><p>{data.enabled ? "Активен" : "Отключён владельцем"} · обновлён {new Date(data.updated_at).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p></div>
+            <div><b>{data.profile_name}</b><p>{data.enabled ? "Активен" : "Отключён владельцем"} · обновлён {new Date(data.updated_at).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p></div>
           </div>
           <div className="publicStats">
             <div><Wifi /><span><small>Серверов</small><b>{data.proxy_count}</b></span></div>
@@ -196,7 +189,7 @@ export default function SubscriptionPage({ slug }: { slug: string }) {
         {tab === "install" ? (
           <section className="publicInstallCard">
             <div className="publicSectionHead">
-              <div><small>БЫСТРЫЙ СТАРТ</small><h2>Подключение за пару минут</h2></div>
+              <div><h2>Подключение за пару минут</h2></div>
               <div className="publicPlatformSelect">
                 <Laptop />
                 <select value={platform} onChange={(event) => setPlatform(event.target.value)}>
@@ -213,11 +206,11 @@ export default function SubscriptionPage({ slug }: { slug: string }) {
               ))}
             </div>
 
-            <div className="publicSteps">
-              <article><span>1</span><div><h3>Установите {selectedClient?.name}</h3><p>Скачайте актуальную версию клиента для {PUBLIC_PLATFORMS.find((item) => item.id === platform)?.label}.</p>{selectedClient?.href ? <a href={selectedClient.href} target="_blank" rel="noreferrer"><Download /> Скачать приложение <ExternalLink /></a> : <div className="publicInstalled"><Check /> Уже установлен</div>}</div></article>
-              <article><span>2</span><div><h3>Скопируйте ссылку</h3><p>Универсальная ссылка подходит для импорта и открывает эту страницу в браузере. Не передавайте персональные ссылки другим людям.</p><div className="publicLinkGroup"><label><span>Универсальная</span><div className="publicLinkBox"><code>{data.subscription_url}</code><button onClick={copySubscription} aria-label="Скопировать универсальную ссылку">{copied ? <Check /> : <Copy />}</button></div></label><label><span>Только конфиг</span><div className="publicLinkBox"><code>{data.config_url}</code><button onClick={copyConfig} aria-label="Скопировать ссылку только на конфиг">{configCopied ? <Check /> : <Copy />}</button></div></label></div></div></article>
-              <article><span>3</span><div><h3>Добавьте профиль</h3><p>Откройте раздел профилей в приложении, выберите импорт по URL и вставьте скопированную ссылку.</p><button className="publicPrimary" onClick={copySubscription}>{copied ? <Check /> : <Clipboard />} {copied ? "Ссылка скопирована" : "Скопировать для импорта"}</button></div></article>
-            </div>
+            <ol className="publicSteps">
+              <li><div><h3>Установите {selectedClient?.name}</h3><p>Скачайте актуальную версию клиента для {PUBLIC_PLATFORMS.find((item) => item.id === platform)?.label}.</p>{selectedClient?.href ? <a href={selectedClient.href} target="_blank" rel="noreferrer"><Download /> Скачать приложение <ExternalLink /></a> : <div className="publicInstalled"><Check /> Уже установлен</div>}</div></li>
+              <li><div><h3>Скопируйте ссылку</h3><p>Универсальная ссылка подходит для импорта и открывает эту страницу в браузере. Не передавайте персональные ссылки другим людям.</p><div className="publicLinkGroup"><label><span>Универсальная</span><div className="publicLinkBox"><code>{data.subscription_url}</code><button onClick={copySubscription} aria-label="Скопировать универсальную ссылку">{copied ? <Check /> : <Copy />}</button></div></label><label><span>Только конфиг</span><div className="publicLinkBox"><code>{data.config_url}</code><button onClick={copyConfig} aria-label="Скопировать ссылку только на конфиг">{configCopied ? <Check /> : <Copy />}</button></div></label></div></div></li>
+              <li><div><h3>Добавьте профиль</h3><p>Откройте раздел профилей в приложении, выберите импорт по URL и вставьте скопированную ссылку.</p><button className="publicPrimary" onClick={copySubscription}>{copied ? <Check /> : <Clipboard />} {copied ? "Ссылка скопирована" : "Скопировать для импорта"}</button></div></li>
+            </ol>
           </section>
         ) : (
           <section className="publicYamlCard">
