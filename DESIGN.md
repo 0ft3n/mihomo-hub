@@ -1,33 +1,33 @@
 ---
 name: Mihomo Hub
-description: A glass control plane for Clash/Mihomo subscriptions — phosphor teal signal over an ink-cyan ground.
+description: A glass control plane for Clash/Mihomo subscriptions — steel-blue signal over a graphite ground.
 colors:
-  phosphor-teal: "#14b8a6"
-  accent-text-dark: "#2fd3bf"
-  accent-text-light: "#0b7268"
-  phosphor-teal-deep: "#0d9488"
-  phosphor-teal-lit: "#1cd1bd"
-  phosphor-teal-shade: "#087e78"
-  ink-cyan-00: "#071116"
-  ink-cyan-01: "#09151b"
-  ink-cyan-02: "#0d1b22"
-  ink-cyan-03: "#10232c"
-  ink-cyan-line: "#1c3039"
-  paper-00: "#f2f6f7"
+  steel-blue: "#5a86c8"
+  steel-blue-deep: "#3f66a4"
+  steel-blue-fill: "#2f5288"
+  steel-blue-fill-deep: "#24406b"
+  accent-text-dark: "#8fb0e0"
+  accent-text-light: "#2b5288"
+  graphite-00: "#0c1017"
+  graphite-01: "#0e131b"
+  graphite-02: "#121822"
+  graphite-03: "#18202c"
+  graphite-line: "#263140"
+  paper-00: "#f3f5f8"
   paper-01: "#ffffff"
-  paper-02: "#edf5f5"
-  paper-line: "#dbe6e8"
-  text-dark: "#eaf2f5"
-  text-light: "#14252c"
-  muted-dark: "#81939d"
-  muted-light: "#687b84"
+  paper-02: "#eef1f6"
+  paper-line: "#dde2ea"
+  text-dark: "#e8edf5"
+  text-light: "#131a24"
+  muted-dark: "#8b98ab"
+  muted-light: "#545e6d"
   live-green: "#26c281"
   live-green-soft: "#3ad6a0"
   alert-coral: "#e87575"
   alert-coral-lit: "#ff8181"
   alert-crimson: "#dc5261"
   caution-amber: "#d5a94c"
-  route-blue: "#4f9cff"
+
 typography:
   display:
     fontFamily: "Manrope, system-ui, sans-serif"
@@ -89,15 +89,15 @@ spacing:
   gutter: "34px"
 components:
   button-primary:
-    backgroundColor: "{colors.phosphor-teal}"
+    backgroundColor: "{colors.steel-blue-fill}"
     textColor: "#ffffff"
     rounded: "{rounded.sm}"
     padding: "10px 15px"
   button-primary-hover:
-    backgroundColor: "{colors.phosphor-teal-lit}"
+    backgroundColor: "{colors.steel-blue}"
     textColor: "#ffffff"
   button-secondary:
-    backgroundColor: "{colors.ink-cyan-03}"
+    backgroundColor: "{colors.graphite-03}"
     textColor: "{colors.text-dark}"
     rounded: "{rounded.sm}"
     padding: "8px 11px"
@@ -117,18 +117,18 @@ components:
     rounded: "{rounded.sm}"
     padding: "10px 12px"
   input:
-    backgroundColor: "{colors.ink-cyan-00}"
+    backgroundColor: "{colors.graphite-00}"
     textColor: "{colors.text-dark}"
     rounded: "{rounded.sm}"
     padding: "10px 12px"
     height: "38px"
   card:
-    backgroundColor: "{colors.ink-cyan-02}"
+    backgroundColor: "{colors.graphite-02}"
     textColor: "{colors.text-dark}"
     rounded: "{rounded.lg}"
     padding: "18px"
   card-glass:
-    backgroundColor: "{colors.ink-cyan-02}"
+    backgroundColor: "{colors.graphite-02}"
     textColor: "{colors.text-dark}"
     rounded: "{rounded.card}"
     padding: "24px 26px"
@@ -155,11 +155,11 @@ Mihomo Hub looks like what it is: infrastructure you can see through. Translucen
 
 Depth is read from the surface stack, not from shadow. Everything rises out of an almost-black blue-green ground (`#071116`) through three progressively lighter tints, and lightness alone tells you what sits on top of what. Hairline borders draw the structure; large soft shadows are atmosphere, never the thing that separates a card from its background. The stack inverts to paper-white and the neutral hierarchy still reads — but neutrals were the only half that inverted cleanly, and every accent and semantic colour needed its own light-theme peer before the light theme actually held.
 
-Color is scarce on purpose. The near-black is the resting state and phosphor teal is a lit trace across it, appearing only where something is genuinely live, selected, focused, or succeeding. The density is tight and instrument-like: 38px controls, 14px body, 10px uppercase labels, `ui-monospace` wherever the user is looking at real config. The register is an operator's console — not a consumer VPN app, and never a growth dashboard.
+Color is scarce on purpose. The near-black is the resting state and steel blue appears only where something is genuinely live, selected, focused, or succeeding. The palette was teal until 2026-09-09; a rendered scan flagged cyan-on-dark as one of the most recognisable generated-UI signatures across 38 elements on the public page alone, so the whole system was rotated to a blue-grey hue that carries the same infrastructure register without the tell. The density is tight and instrument-like: 38px controls, 14px body, 10px uppercase labels, `ui-monospace` wherever the user is looking at real config. The register is an operator's console — not a consumer VPN app, and never a growth dashboard.
 
 **Key Characteristics:**
 - Tonal surface stack (four steps) as the primary depth signal; shadows are ambient only
-- Phosphor teal as a scarce, lit signal against an ink-cyan ground
+- Steel blue as a scarce signal against a graphite ground
 - Hairline 1px borders (`--line`) doing all structural separation
 - Glass as chrome: backdrop blur on headers, modals, and sticky footers, not on content
 - Instrument density — 38px controls, tight 6–13px gaps, monospace for anything real
@@ -172,9 +172,9 @@ An almost-black blue-green ground with a single lit teal signal, plus a narrow s
 
 ### Primary
 
-- **Phosphor Teal** (`#14b8a6`): the signal color. Focus rings, active tabs, selected menu items, live progress fills, the accent on every icon that means "this is the thing". It carries a lit-trace quality — the logo tile glows at `0 0 22px`, the network progress bar drop-shadows at 7px.
-- **Phosphor Teal Deep** (`#0d9488`): the second stop of every primary gradient (`135deg`). Never used alone as a flat fill.
-- **Phosphor Teal Lit** (`#1cd1bd`) / **Phosphor Teal Shade** (`#087e78`): the logo-tile gradient pair, brighter and darker than the accent pair. Reserved for identity marks.
+- **Steel Blue** (`#5a86c8`): the signal color. Focus rings, active tabs, selected menu items, progress fills, the accent on every icon that means "this is the thing". Used flat, never as a glow — zero-offset coloured halos were removed from the system.
+- **Steel Blue Deep** (`#3f66a4`): the lighter companion for borders and tinted fills.
+- **Steel Blue Fill** (`#2f5288`) / **Fill Deep** (`#24406b`): the primary-button gradient and the logo tile. White text clears AA on both stops (7.83:1 and 10.39:1).
 
 ### Secondary
 
@@ -188,21 +188,21 @@ An almost-black blue-green ground with a single lit teal signal, plus a narrow s
 
 ### Neutral
 
-- **Ink Cyan 00** (`#071116`): the page ground, and also the recessed fill inside inputs, code boxes, and nested cards. The darkest step appears both behind everything and inside everything — recession and background share a value.
-- **Ink Cyan 01** (`#09151b`): the sidebar and override key-list rail.
-- **Ink Cyan 02** (`#0d1b22`): the default panel and card surface.
-- **Ink Cyan 03** (`#10232c`): the raised step — secondary buttons, toggles, sticky footers, hovered menu rows.
-- **Ink Cyan Line** (`#1c3039`): every structural border, divider, and rule in the dark theme.
+- **Graphite 00** (`#0c1017`): the page ground, and also the recessed fill inside inputs, code boxes, and nested cards. The darkest step appears both behind everything and inside everything — recession and background share a value.
+- **Graphite 01** (`#0e131b`): the sidebar and override key-list rail.
+- **Graphite 02** (`#121822`): the default panel and card surface.
+- **Graphite 03** (`#18202c`): the raised step — secondary buttons, toggles, sticky footers, hovered menu rows.
+- **Graphite Line** (`#263140`): every structural border, divider, and rule in the dark theme.
 - **Text** (`#eaf2f5`) and **Muted** (`#81939d`): primary and secondary text. Muted carries all captions, labels, hints, and code previews.
 - **Paper 00–02** (`#f2f6f7` / `#ffffff` / `#edf5f5`) with **Paper Line** (`#dbe6e8`): the light theme's inverted stack, with text at `#14252c` and muted at `#687b84`.
 
 ### Named Rules
 
-**The Scarce Signal Rule.** Phosphor teal marks state, never decoration. It is legal on focus rings, active tabs, selected rows, live progress, and primary actions — and nowhere else. If a screen has more than one teal-filled surface competing for the eye, one of them is wrong.
+**The Scarce Signal Rule.** Steel blue marks state, never decoration. It is legal on focus rings, active tabs, selected rows, live progress, and primary actions — and nowhere else. If a screen has more than one accent-filled surface competing for the eye, one of them is wrong.
 
-**The Derived Tint Rule.** Never introduce a new teal hex. Every tinted surface, border, and glow is `color-mix(in srgb, var(--accent) N%, ...)` — 5–10% for fills, 34–55% for borders, 13–15% for focus rings. The accent has exactly one source of truth per theme.
+**The Derived Tint Rule.** Never introduce a new accent hex. Every tinted surface, border, and glow is `color-mix(in srgb, var(--accent) N%, ...)` — 5–10% for fills, 34–55% for borders, 13–15% for focus rings. The accent has exactly one source of truth per theme.
 
-**The Two Greens Rule.** Teal means *selected*; green means *running*. They never substitute for one another. A status dot is green (`#26c281`); a chosen tab is teal.
+**The Two Signals Rule.** Blue means *selected*; green means *running*. They never substitute for one another. A status dot is green; a chosen tab is blue.
 
 **The Inverted Stack Rule.** No color is written directly into a component. Both themes redeclare the same ten properties on `:root` and `html[data-theme=light]`; a component that hardcodes `#0d1b22` is a light-theme bug that has not happened yet.
 
@@ -366,6 +366,7 @@ These were present in the incumbent build and were recorded here as if intention
 - **Zero-offset accent glows** on the logo, modal icons, brand mark and status dots — removed 2026-09-09.
 - **The 49px icon tile above the Welcome heading** — removed 2026-09-09; a rounded-square icon container above an h1 is the universal generated feature-card shape.
 - **Functional text below 11px** — 34 declarations at 9-10px raised 2026-09-09.
+- **The teal palette itself** — replaced 2026-09-09 with steel blue on graphite. A rendered scan flagged cyan-on-dark 38 times on the public page and 33 on the panel; three candidate palettes were built and scanned before choosing, and the replacement scores zero on that rule with every contrast pair above AA.
 - **Still open:** the `.publicGrid` 64px lattice (60px `repeating-linear-gradient` on `.welcome`, 64px `background-size` on `.publicGrid`); the detector flags the second as a generated-UI signature. Two authored surfaces (probe panel, override workspace) remain buried three to four levels deep behind template screens.
 
 ## Do's and Don'ts
@@ -385,8 +386,8 @@ These were present in the incumbent build and were recorded here as if intention
 
 ### Don't:
 
-- **Don't** use phosphor teal as decoration. It marks live, selected, focused, or succeeding state, and if two teal-filled surfaces compete on one screen, one is wrong.
-- **Don't** substitute teal for green. Teal is *selected*; `#26c281` green is *running*. A status indicator is never teal.
+- **Don't** use steel blue as decoration. It marks live, selected, focused, or succeeding state, and if two accent-filled surfaces compete on one screen, one is wrong.
+- **Don't** substitute the accent for green. Blue is *selected*; green is *running*. A status indicator is never teal.
 - **Don't** hardcode a hex into a component. Both themes redeclare the same ten custom properties; a literal color is a light-theme bug waiting to be found.
 - **Don't** make shadows structural. `--shadow` is atmosphere; if a card only separates from its background because of its shadow, the tonal step is missing.
 - **Don't** introduce a 2px structural border, and never a coloured `border-left` above 1px on a card, callout or alert. The active-tab underline is the system's only 2px stroke.
@@ -397,5 +398,5 @@ These were present in the incumbent build and were recorded here as if intention
 - **Don't** reach for the hero-metric template — a big number over a small label in a row of equal cards. State the fact in a sentence.
 - **Don't** design in the consumer-VPN register: no giant glowing shield, no flag grids, no single hero connect-button, no reassurance copy. The operator wants controls, not comfort.
 - **Don't** add a CSS framework, utility classes, or a component library. The system is hand-written CSS custom properties in one stylesheet, and that is a durable constraint.
-- **Don't** colour text or a meaningful icon with `var(--accent)`. The bright accent is for fills, borders and glows; text and icons take `var(--accent-text)`, which has a real light-theme peer. `#14b8a6` is 2.49:1 on white and fails AA outright.
+- **Don't** colour text or a meaningful icon with `var(--accent)`. The bright accent is for fills and borders; text and icons take `var(--accent-text)`, which has a real light-theme peer.
 - **Don't** ship a motion effect without confirming the `prefers-reduced-motion` block still neutralizes it.

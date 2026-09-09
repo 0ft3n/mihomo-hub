@@ -39,6 +39,21 @@ The position is the combination, not any single part — a neighboring tool has 
 - The recipient's context is a phone browser, cold, possibly on a bad connection, with no client installed yet. Clients are cross-platform and external (Koala Clash, Clash Verge Rev, FlClash across Windows / macOS / Linux / Android).
 - Admin work — templates for new subscriptions, default profiles, global custom rule sets, cross-account subscription management — is a separate password-gated area of the same panel.
 
+## Routing
+
+The backend owns `/api/*`, `/sub/*`, `/s/*`, `/c/*` and `/rule-sets/*`. The recipient-facing page sits at `/subscription/{slug}` and is externally reachable, so its path is frozen — issued links redirect there.
+
+The operator panel therefore lives under its own `/app` prefix, chosen so no future backend path can collide with it and so nginx can separate the two with one rule:
+
+- `/app` — redirects to the first subscription, or the empty state when there are none
+- `/app/subscriptions/:id` — subscription overview
+- `/app/subscriptions/:id/yaml` — upstream YAML
+- `/app/subscriptions/:id/profiles/:profileId` — profile editor
+- `/app/admin` — administration
+- `/app/admin/subscriptions/:id` — administrator managing one subscription
+
+Anything unmatched under `/app` renders a not-found view; anything unmatched outside it redirects to `/app`. `frontend/nginx.conf` already falls back to `index.html` for non-backend paths, so deep links work without further server changes.
+
 ## Capabilities and Constraints
 
 **Confirmed capabilities**
@@ -47,7 +62,7 @@ The position is the combination, not any single part — a neighboring tool has 
 - Per profile: `rules` + `rules_mode` (`prepend` / `replace`), `geo`, `overrides` (deep-merged, `null` deletes), `custom_proxies`, optional `proxy_groups`.
 - Custom proxies: VLESS, Trojan, Shadowsocks, Hysteria2, VMess — via constructor, via `vless://` / `trojan://` / `hysteria2://` / `ss://` / `vmess://` link import, or as raw YAML.
 - Live proxy probing that measures candidate dialer routes and picks the fastest working one.
-- Three public URL forms per profile (`/sub/{slug}`, `/s/{short}`, `/c/{config}`) plus a YAML provider endpoint, all rotatable.
+- Three public URL forms per profile (`/sub/{slug}`, `/s/{short}`, `/c/{config}`) plus a YAML provider endpoint, all rotatable. A browser hitting any of them is 307-redirected to the SPA page at `/subscription/{slug}`.
 - Custom rule sets served as YAML providers at `/rule-sets/{name}.list`.
 - Admin overview, editable profile templates for new subscriptions, and administrator access to a subscription's upstream secrets when managing it.
 - Public subscription page showing quota/usage, expiry, proxy/group/rule counts, protocol types, and platform-filtered client recommendations.
@@ -56,7 +71,7 @@ The position is the combination, not any single part — a neighboring tool has 
 
 - **Russian-only UI.** No i18n layer is planned. Interface copy is Russian; protocol and technical identifiers stay in Latin (VLESS, grpc, SNI, `overrides`). Russian pluralization is hand-written where needed.
 - **Dark-first, both themes real.** The teal-on-near-black dark theme is the identity. The light theme is a fully supported peer driven by the same custom properties, never a degraded afterthought.
-- **No framework, no component library.** Styling is hand-written CSS with custom properties on `:root` and `html[data-theme=light]`, in a single `frontend/style.css`. Monaco and lucide-react are the only UI dependencies. The frontend was a single `src.tsx` until 2026-09-09, when it was split by route into `src.tsx` (entry), `public.tsx`, `app.tsx`, and `shared.tsx` so the public hand-off page stops shipping the operator panel to recipients. New modules are added only for a payload or boundary reason of that kind, never for organisation alone.
+- **No framework, no component library.** Styling is hand-written CSS with custom properties on `:root` and `html[data-theme=light]`, in a single `frontend/style.css`. Monaco, lucide-react and react-router-dom are the only frontend dependencies; the router was added 2026-09-09 so the panel has real, shareable, back-button-correct paths instead of one URL driven by component state. The frontend was a single `src.tsx` until 2026-09-09, when it was split by route into `src.tsx` (entry), `public.tsx`, `app.tsx`, and `shared.tsx` so the public hand-off page stops shipping the operator panel to recipients. New modules are added only for a payload or boundary reason of that kind, never for organisation alone.
 - **Small-scale self-host.** Built for one operator serving a handful of people. No billing, no user management, no multi-tenant or scale-out surfaces.
 - Security constraints that are product-visible: upstream URLs pointing at local/reserved IPs are refused, upstream responses are capped at 10 MB, and public profile URLs are random rather than guessable.
 
