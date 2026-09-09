@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import {
   AlertTriangle,
   Check,
@@ -44,20 +45,26 @@ type PublicProfileInfo = {
 };
 
 const PUBLIC_CLIENTS = [
-  
+  {
+    id: "koala",
+    name: "Koala Clash",
+    platforms: ["windows", "macos", "linux"],
+    href: "https://github.com/coolcoala/koala-clash/releases",
+    accent: "#8fb0e0",
+  },
   {
     id: "verge",
     name: "Clash Verge Rev",
     platforms: ["windows", "macos", "linux"],
     href: "https://github.com/clash-verge-rev/clash-verge-rev/releases",
-    accent: "#60a5fa",
+    accent: "#d8bd8a",
   },
   {
     id: "flclash",
     name: "FlClash",
     platforms: ["windows", "android", "macos", "linux"],
     href: "https://github.com/chen08209/FlClash/releases",
-    accent: "#a78bfa",
+    accent: "#9db089",
   },
 ];
 
@@ -75,13 +82,14 @@ function daysWord(value: number) {
   return "дней";
 }
 
-export default function SubscriptionPage({ slug }: { slug: string }) {
+export default function SubscriptionPage() {
+  const slug = useParams().slug || "";
   const [data, setData] = useState<PublicProfileInfo>();
   const [error, setError] = useState("");
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [tab, setTab] = useState<"install" | "yaml">("install");
   const [platform, setPlatform] = useState("windows");
-  const [clientId, setClientId] = useState("verge");
+  const [clientId, setClientId] = useState("koala");
   const [yamlText, setYamlText] = useState("");
   const [yamlLoading, setYamlLoading] = useState(false);
   const { copy, copiedKey, failed: copyFailed } = useCopyAction();
