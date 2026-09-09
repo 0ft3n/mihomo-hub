@@ -7,6 +7,14 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  Navigate,
+  Route as RouteDef,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
+import {
   Activity,
   AlertTriangle,
   ArrowDownToLine,
@@ -319,9 +327,12 @@ export default function App() {
   const [authed, setAuthed] = useState(!!token());
   const [subs, setSubs] = useState<Sub[]>([]);
   const [customRuleSets, setCustomRuleSets] = useState<CustomRuleSet[]>([]);
-  const [active, setActive] = useState<number>();
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
-  const [admin, setAdmin] = useState(false);
+  const navigate = useNavigate();
+  const path = useLocation().pathname;
+  const admin = path.startsWith("/app/admin");
+  const activeMatch = path.match(/^\/app\/subscriptions\/(\d+)/);
+  const active = activeMatch ? Number(activeMatch[1]) : undefined;
   const [networkBusy, setNetworkBusy] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [newSubscriptionUrl, setNewSubscriptionUrl] = useState("");
@@ -352,11 +363,7 @@ export default function App() {
       .then(([subscriptions, ruleSets]) => {
         setSubs(subscriptions);
         setCustomRuleSets(ruleSets);
-        setActive((current) =>
-          subscriptions.some((subscription: Sub) => subscription.id === current)
-            ? current
-            : subscriptions[0]?.id,
-        );
+
       })
       .catch((error: any) => {
         if (error?.status === 401 || error?.status === 403) {
@@ -404,7 +411,7 @@ export default function App() {
           <span>РАБОЧЕЕ ПРОСТРАНСТВО</span>
           <button
             className={!admin ? "on" : ""}
-            onClick={() => setAdmin(false)}
+            onClick={() => navigate("/app")}
           >
             <LayoutDashboard />
             Обзор
@@ -413,10 +420,7 @@ export default function App() {
           {subs.map((s) => (
             <button
               className={!admin && s.id === active ? "on" : ""}
-              onClick={() => {
-                setActive(s.id);
-                setAdmin(false);
-              }}
+              onClick={() => navigate(`/app/subscriptions/${s.id}`)}
               key={s.id}
             >
               <Server />
@@ -429,7 +433,7 @@ export default function App() {
             Добавить подписку
           </button>
           <span>СИСТЕМА</span>
-          <button className={admin ? "on" : ""} onClick={() => setAdmin(true)}>
+          <button className={admin ? "on" : ""} onClick={() => navigate("/app/admin")}>
             <Shield />
             Администрирование
           </button>
@@ -477,18 +481,24 @@ export default function App() {
             </div>
           </div>
         )}
-        {admin ? (
-          <Admin key="admin" onRuleSetsChange={setCustomRuleSets} />
-        ) : sub ? (
-          <Subscription
-            key={sub.id}
-            sub={sub}
-            reload={load}
-            customRuleSets={customRuleSets}
+        <Routes>
+          <RouteDef
+            path="admin/*"
+            element={<Admin key="admin" onRuleSetsChange={setCustomRuleSets} />}
           />
-        ) : (
-          <Empty />
-        )}
+          <RouteDef
+            path="subscriptions/:id/*"
+            element={
+              <SubscriptionRoute
+                subs={subs}
+                reload={load}
+                customRuleSets={customRuleSets}
+              />
+            }
+          />
+          <RouteDef path="" element={<AppIndex subs={subs} />} />
+          <RouteDef path="*" element={<NotFound />} />
+        </Routes>
       </main>
       {keyOpen && createPortal(
         <div className="modalBackdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setKeyOpen(false); }}>
@@ -912,6 +922,49 @@ function Welcome({
   );
 }
 
+function AppIndex({ subs }: { subs: Sub[] }) {
+  if (subs.length)
+    return <Navigate to={`/app/subscriptions/${subs[0].id}`} replace />;
+  return <Empty />;
+}
+
+function SubscriptionRoute({
+  subs,
+  reload,
+  customRuleSets,
+}: {
+  subs: Sub[];
+  reload: () => void | Promise<void>;
+  customRuleSets: CustomRuleSet[];
+}) {
+  const id = Number(useParams().id);
+  const sub = subs.find((s) => s.id === id);
+  // список ещё грузится — не выносим приговор по несуществующей подписке
+  if (!sub) return subs.length ? <NotFound /> : <div className="page" />;
+  return (
+    <Subscription
+      key={sub.id}
+      sub={sub}
+      reload={reload}
+      customRuleSets={customRuleSets}
+    />
+  );
+}
+
+function NotFound() {
+  const navigate = useNavigate();
+  return (
+    <div className="empty">
+      <Server />
+      <h2>Страница не найдена</h2>
+      <p>Проверьте адрес — возможно, подписка была удалена.</p>
+      <button className="primary" onClick={() => navigate("/app")}>
+        Вернуться к подпискам
+      </button>
+    </div>
+  );
+}
+
 function Subscription({
   sub,
   reload,
@@ -925,9 +978,16 @@ function Subscription({
   adminPassword?: string;
   backToAdmin?: () => void;
 }) {
-  const [tab, setTab] = useState("overview");
+  const navigate = useNavigate();
+  const routePath = useLocation().pathname;
+  const base = adminPassword
+    ? `/app/admin/subscriptions/${sub.id}`
+    : `/app/subscriptions/${sub.id}`;
+  const tab = routePath.endsWith("/yaml") ? "yaml" : "overview";
+  const editMatch = routePath.match(/\/profiles\/(\d+)/);
   const [full, setFull] = useState<Sub>();
-  const [edit, setEdit] = useState<Profile>();
+  const setTab = (next: string) =>
+    navigate(next === "yaml" ? `${base}/yaml` : base);
   const [renaming, setRenaming] = useState(false);
   const [subscriptionName, setSubscriptionName] = useState(sub.name);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -979,9 +1039,15 @@ function Subscription({
     () => catalogFromYaml(data.yaml || ""),
     [data.yaml],
   );
+  const edit = editMatch
+    ? data.profiles.find((p) => p.id === Number(editMatch[1]))
+    : undefined;
+  if (editMatch && !edit && data.profiles.length)
+    return <NotFound />;
   if (edit)
     return (
       <Editor
+        key={edit.id}
         profile={edit}
         proxies={[
           ...new Set([
@@ -1007,11 +1073,11 @@ function Subscription({
           method: "POST",
           body: JSON.stringify({ proxy }),
         }, onEvent)}
-        back={() => setEdit(undefined)}
+        back={() => navigate(base)}
         saveProfile={
           adminPassword
             ? async (updated) => {
-                await request(`/profiles/${edit.id}`, {
+                await request(`/profiles/${edit!.id}`, {
                   method: "PATCH",
                   body: JSON.stringify(updated),
                 });
@@ -1019,7 +1085,7 @@ function Subscription({
             : undefined
         }
         saved={() => {
-          setEdit(undefined);
+          navigate(base);
           reload();
           request(`/subscriptions/${sub.id}`).then(setFull);
         }}
@@ -1080,7 +1146,7 @@ function Subscription({
                     }}
                   />
                 ) : (
-                  <h3>{data.name}</h3>
+                  <h2 className="sourceName">{data.name}</h2>
                 )}
                 <p>{data.source_url}</p>
               </div>
@@ -1192,7 +1258,7 @@ function Subscription({
                   await reload();
                   const updated = await request(`/subscriptions/${sub.id}`);
                   setFull(updated);
-                  setEdit(created);
+                  navigate(`${base}/profiles/${created.id}`);
                 })
               }
             >
@@ -1227,7 +1293,7 @@ function Subscription({
                   </button>
                 </div>
                 <div className="profileBtns">
-                  <button onClick={() => setEdit(p)}>
+                  <button onClick={() => navigate(`${base}/profiles/${p.id}`)}>
                     <FileCog />
                     Настроить
                   </button>
@@ -2692,7 +2758,10 @@ function Admin({
   const [customRuleSetIds, setCustomRuleSetIds] = useState<string[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<number>(0);
   const [editTemplate, setEditTemplate] = useState<number>();
-  const [editSubscriptionId, setEditSubscriptionId] = useState<number>();
+  const adminNavigate = useNavigate();
+  const adminPath = useLocation().pathname;
+  const adminSubMatch = adminPath.match(/^\/app\/admin\/subscriptions\/(\d+)/);
+  const editSubscriptionId = adminSubMatch ? Number(adminSubMatch[1]) : undefined;
   const [message, setMessage] = useState("");
   async function load() {
     try {
@@ -2753,7 +2822,7 @@ function Admin({
           reload={load}
           customRuleSets={customRuleSets}
           adminPassword={pass}
-          backToAdmin={() => setEditSubscriptionId(undefined)}
+          backToAdmin={() => adminNavigate("/app/admin")}
         />
       );
   }
@@ -2826,7 +2895,7 @@ function Admin({
                 <span>{s.source_meta.proxy_count} узлов</span>
                 <button
                   className="adminManageButton"
-                  onClick={() => setEditSubscriptionId(s.id)}
+                  onClick={() => adminNavigate(`/app/admin/subscriptions/${s.id}`)}
                 >
                   <Settings /> Управлять
                 </button>
