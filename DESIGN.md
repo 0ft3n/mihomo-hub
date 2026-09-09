@@ -34,7 +34,7 @@ typography:
     fontSize: "clamp(34px, 5vw, 58px)"
     fontWeight: 800
     lineHeight: 1.08
-    letterSpacing: "-2.4px"
+    letterSpacing: "-0.032em"
   headline:
     fontFamily: "Manrope, system-ui, sans-serif"
     fontSize: "25px"
@@ -138,12 +138,6 @@ components:
     rounded: "{rounded.pill}"
     padding: "5px 9px"
     height: "25px"
-  eyebrow:
-    backgroundColor: "#0f2a28"
-    textColor: "#63dbc9"
-    typography: "{typography.label}"
-    rounded: "{rounded.pill}"
-    padding: "6px 10px"
   callout:
     backgroundColor: "#10302d"
     textColor: "#b9e7e0"
@@ -157,7 +151,7 @@ components:
 
 **Creative North Star: "The Glass Control Plane"**
 
-Mihomo Hub looks like what it is: infrastructure you can see through. Translucent panels float above a faint technical grid, and the grid never fully disappears behind them — a 64px lattice bleeds through the public page, a `backdrop-filter: blur(16px)` header lets the page scroll underneath itself, and modal chrome frosts rather than blocks. The metaphor is a control plane rendered in glass: the machinery is visible, the interface is the pane you reach through to touch it.
+Mihomo Hub looks like what it is: infrastructure you can see through. Translucent panels float above a faint technical grid, and the grid never fully disappears behind them — a 64px lattice bleeds through the public page, the panel's `backdrop-filter: blur(16px)` header lets the page scroll underneath itself, and modal chrome frosts rather than blocks. The metaphor is a control plane rendered in glass: the machinery is visible, the interface is the pane you reach through to touch it.
 
 Depth is read from the surface stack, not from shadow. Everything rises out of an almost-black blue-green ground (`#071116`) through three progressively lighter tints, and lightness alone tells you what sits on top of what. Hairline borders draw the structure; large soft shadows are atmosphere, never the thing that separates a card from its background. The stack inverts to paper-white and the neutral hierarchy still reads — but neutrals were the only half that inverted cleanly, and every accent and semantic colour needed its own light-theme peer before the light theme actually held.
 
@@ -221,12 +215,12 @@ An almost-black blue-green ground with a single lit teal signal, plus a narrow s
 
 ### Hierarchy
 
-- **Display** (800, `clamp(34px, 5vw, 58px)`, 1.08, `-2.4px`): public page hero only. Tightly tracked to the point of near-collision — this is deliberate and should not be loosened.
+- **Display** (800, `clamp(34px, 5vw, 58px)`, 1.08, `-0.032em`): public page hero only. Tight, but above the `-0.04em` floor.
 - **Headline** (800, 25px, `-0.6px`): section heads on the public page.
 - **Title** (700, 17px): page titles in the app header, card headings, modal titles.
 - **Body** (400, 14px, 1.55): the base. Descriptive paragraphs cap around 510–620px.
 - **Caption** (400, 11px, 1.45): hints, muted descriptions, secondary card text.
-- **Label** (800, 9–11px, `+1.2–1.4px`, uppercase): nav group headers, eyebrows, stat captions, `ПАНЕЛЬ УПРАВЛЕНИЯ`-style overlines. Always in muted or accent, never in primary text.
+- **Label** (800, 9–11px, `+1.2–1.4px`, uppercase): reserved for structural labels that are not headings — nav group headers and column captions. Never as an overline above a heading.
 - **Mono** (400, 10–12px, 1.6): rules, YAML previews, subscription URLs, server addresses, proxy identifiers.
 
 ### Named Rules
@@ -267,18 +261,18 @@ Spacing is a tight, slightly irregular scale inherited from hand-tuning rather t
 Two techniques support it and neither may replace it:
 
 - **Hairlines.** A single `1px solid var(--line)` border is the structural separator throughout. Every panel, card, input, divider, and rail uses it, and it survives both themes because it is a token.
-- **Glass.** `backdrop-filter: blur()` is reserved for *chrome that floats over content* — the sticky app header (16px), modal backdrops (10px), the public page's translucent cards (20px), and the custom-proxy modal's sticky footer (12px). Content surfaces are never glass.
+- **Glass.** `backdrop-filter: blur()` is reserved for *chrome that floats over content* — the sticky app header (16px), modal backdrops (10px), and the custom-proxy modal's sticky footer (12px). Content surfaces are never glass — the public page's cards were translucent at 20px with nothing scrolling beneath them, which is decoration, and they are now opaque.
 
 Shadows exist but are atmospheric. `--shadow` is a wide, very soft, low-opacity drop (`0 18px 50px #0004` dark / `0 16px 40px #16434a12` light) that gives cards presence without implying they are lifted. The only shadows with real force are on genuinely floating layers — the select menu (`0 18px 50px #0008`) and the modal (`0 30px 90px #0009`).
 
 ### Shadow Vocabulary
 
-- **Ambient card** (`box-shadow: var(--shadow)`): default on panels, metrics, profiles. Atmosphere, not separation.
+- **Ambient card** (`box-shadow: var(--shadow)`, `0 6px 14px`): default on panels and profiles. Deliberately shallow — a 1px border paired with a 50px blur reads as a generated-UI signature, so the system commits to the edge and keeps the shadow faint.
 - **Card hover** (`box-shadow: 0 18px 45px #0005`, plus border → `color-mix(in srgb, var(--accent) 35%, var(--line))`): the border shift is the real signal; the shadow just deepens with it.
 - **Floating menu** (`box-shadow: 0 18px 50px #0008`): dropdowns and comboboxes.
 - **Modal** (`box-shadow: 0 30px 90px #0009`): dialogs only.
 - **Focus ring** (`box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent)`): every focused input, select, and combobox. Paired with `border-color: var(--accent)`.
-- **Accent glow** (`box-shadow: 0 0 22px #14b8a633` on the logo, `0 8px 25px #14b8a638` on modal icons, `0 0 9px` on status dots): the phosphor quality. Reserved for identity marks and live indicators.
+- **Accent glow:** removed 2026-09-09. Zero-offset coloured halos are decoration, not depth; the craft floor requires an offset and a soft blur. The phosphor character now comes from the accent itself, not from a halo behind it.
 
 ### Named Rules
 
@@ -302,7 +296,7 @@ Dashed borders (`1px dashed var(--line)`) mean *add something here* — the "add
 
 **The Radius Ladder Rule.** Radius is a function of size: 6–7px small, 8–9px medium, 10px panel, 13px feature, 18–20px hero card, 999px pill. A component's radius must sit below its container's.
 
-**The One-Pixel Rule.** Structural borders are 1px. The only 2px strokes in the system are the active-tab underline and the callout's left rule — both indicators, never enclosures.
+**The One-Pixel Rule.** Structural borders are 1px, with no exceptions for enclosures. The single 2px stroke is the active-tab underline, which is an indicator and not a container. A coloured `border-left` thicker than 1px on a card, list item, callout or alert is a recognisable generated-UI tell and is banned outright.
 
 **The Dashed-Means-Empty Rule.** A dashed border means an affordance to create or a slot with nothing in it. It never decorates a filled surface.
 
@@ -360,6 +354,20 @@ A 3px fixed bar at the very top of the viewport, `z-index: 1000`, holding a 38% 
 
 The live latency-measurement surface. A tinted container (`5% accent on --bg`, 34% accent border) holding a summary row that shifts between three states — `running` (accent border and text, with a pulsing icon), `success` (45% accent border, 8% accent fill), and `failed` (`#74333b` border, `#421e24` fill, `#ef7f8c` text) — above a 4px determinate progress bar and a 2-column scrollable grid of 36px result rows. Pending results pulse their latency label; the chosen route takes an accent border and 10% fill. It is the one place in the system where teal is allowed to be busy, because measurement in progress is exactly the state teal exists to show.
 
+## Design Debt
+
+These were present in the incumbent build and were recorded here as if intentional. They are debt, not identity, and later passes must not cite this document to protect them.
+
+- **Kickers and eyebrows** (`ПАНЕЛЬ УПРАВЛЕНИЯ`, `SELF-HOSTED CONTROL PLANE`, `ПРОФИЛЬ`, `БЫСТРЫЙ СТАРТ`, `.publicEyebrow`) — removed 2026-09-09. The craft floor bans them outright; an earlier revision of this file had promoted them to a named typography tier.
+- **The hero-metric row** (`.metric` × 7) — replaced 2026-09-09 with a single line of fact, so the space above the fold goes to the profile cards.
+- **Decorative glass** on the three public content cards — removed 2026-09-09; nothing scrolled beneath them.
+- **The 2px accent `border-left` on `.callout`** — removed 2026-09-09.
+- **Decorative backgrounds** — removed 2026-09-09: the `.welcome` radial haze plus its two 60px `repeating-linear-gradient` lattices, and the two radial spotlights on `.publicSubPage`. A rendered scan flagged the radial haze as a spotlight glow and the lattices as decorative stripes.
+- **Zero-offset accent glows** on the logo, modal icons, brand mark and status dots — removed 2026-09-09.
+- **The 49px icon tile above the Welcome heading** — removed 2026-09-09; a rounded-square icon container above an h1 is the universal generated feature-card shape.
+- **Functional text below 11px** — 34 declarations at 9-10px raised 2026-09-09.
+- **Still open:** the `.publicGrid` 64px lattice (60px `repeating-linear-gradient` on `.welcome`, 64px `background-size` on `.publicGrid`); the detector flags the second as a generated-UI signature. Two authored surfaces (probe panel, override workspace) remain buried three to four levels deep behind template screens.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -381,10 +389,12 @@ The live latency-measurement surface. A tinted container (`5% accent on --bg`, 3
 - **Don't** substitute teal for green. Teal is *selected*; `#26c281` green is *running*. A status indicator is never teal.
 - **Don't** hardcode a hex into a component. Both themes redeclare the same ten custom properties; a literal color is a light-theme bug waiting to be found.
 - **Don't** make shadows structural. `--shadow` is atmosphere; if a card only separates from its background because of its shadow, the tonal step is missing.
-- **Don't** introduce a 2px structural border. The only 2px strokes are the active-tab underline and the callout's left rule, and both are indicators, not enclosures.
+- **Don't** introduce a 2px structural border, and never a coloured `border-left` above 1px on a card, callout or alert. The active-tab underline is the system's only 2px stroke.
 - **Don't** blur a content card's background. Glass is chrome; content surfaces are opaque tonal steps.
-- **Don't** loosen the display tracking. `-2.4px` at hero size is the intended near-collision, not an accident.
+- **Don't** track display type tighter than `-0.04em`. The hero previously sat at `-2.4px` (≈`-0.07em` at the mobile clamp floor), which a rendered scan flags as extreme negative tracking; both heroes are now `-0.032em`.
 - **Don't** replace the mobile bottom rail with a hamburger drawer. Below 700px navigation stays permanently visible; hiding where-you-are behind a menu is wrong for this product.
+- **Don't** place a kicker, eyebrow or uppercase overline above a heading. The heading carries its own weight.
+- **Don't** reach for the hero-metric template — a big number over a small label in a row of equal cards. State the fact in a sentence.
 - **Don't** design in the consumer-VPN register: no giant glowing shield, no flag grids, no single hero connect-button, no reassurance copy. The operator wants controls, not comfort.
 - **Don't** add a CSS framework, utility classes, or a component library. The system is hand-written CSS custom properties in one stylesheet, and that is a durable constraint.
 - **Don't** colour text or a meaningful icon with `var(--accent)`. The bright accent is for fills, borders and glows; text and icons take `var(--accent-text)`, which has a real light-theme peer. `#14b8a6` is 2.49:1 on white and fails AA outright.

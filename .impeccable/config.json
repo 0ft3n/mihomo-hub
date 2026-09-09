@@ -1,0 +1,21 @@
+{
+  "hook": {
+    "enabled": true,
+    "limits": {
+      "maxFindings": 5,
+      "maxChars": 8000
+    }
+  },
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "bounce-easing",
+        "value": "var(--ease-spring)",
+        "createdAt": "2026-09-09T19:06:14.356Z",
+        "reason": "Agent: cubic-bezier(.22,1,.36,1) is monotonic easeOutQuint, no overshoot; rule matches token name not curve"
+      }
+    ]
+  }
+}
