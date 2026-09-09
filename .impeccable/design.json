@@ -1,0 +1,343 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-09T00:00:00Z",
+  "title": "Design System: Mihomo Hub",
+  "extensions": {
+    "colorMeta": {
+      "phosphor-teal": {
+        "role": "primary",
+        "displayName": "Phosphor Teal",
+        "canonical": "#14b8a6",
+        "tonalRamp": ["#052926", "#08423c", "#0b5b53", "#0d9488", "#14b8a6", "#3fd3c3", "#7ce5da", "#c4f5ef"]
+      },
+      "phosphor-teal-deep": {
+        "role": "primary",
+        "displayName": "Phosphor Teal Deep",
+        "canonical": "#0d9488",
+        "tonalRamp": ["#042320", "#063a34", "#095049", "#0b7268", "#0d9488", "#2fb9ac", "#74dcd0", "#c0f2ec"]
+      },
+      "phosphor-teal-lit": {
+        "role": "primary",
+        "displayName": "Phosphor Teal Lit",
+        "canonical": "#1cd1bd",
+        "tonalRamp": ["#062f2a", "#094a43", "#0c655c", "#118a7d", "#16aa9a", "#1cd1bd", "#66e6d8", "#bdf5ee"]
+      },
+      "phosphor-teal-shade": {
+        "role": "primary",
+        "displayName": "Phosphor Teal Shade",
+        "canonical": "#087e78",
+        "tonalRamp": ["#031e1d", "#053230", "#064543", "#076260", "#087e78", "#2aa49d", "#6fcfc8", "#bdeeea"]
+      },
+      "ink-cyan-00": {
+        "role": "neutral",
+        "displayName": "Ink Cyan 00",
+        "canonical": "#071116",
+        "tonalRamp": ["#040b0e", "#071116", "#0d1b22", "#142b34", "#22434f", "#3a6675", "#6f97a4", "#b9ced6"]
+      },
+      "ink-cyan-01": {
+        "role": "neutral",
+        "displayName": "Ink Cyan 01",
+        "canonical": "#09151b",
+        "tonalRamp": ["#050c10", "#09151b", "#0f2029", "#173038", "#264a56", "#3e6e7c", "#739daa", "#bbd2d9"]
+      },
+      "ink-cyan-02": {
+        "role": "neutral",
+        "displayName": "Ink Cyan 02",
+        "canonical": "#0d1b22",
+        "tonalRamp": ["#070f13", "#0d1b22", "#13272f", "#1c3843", "#2c5261", "#457686", "#79a4b1", "#bfd6dd"]
+      },
+      "ink-cyan-03": {
+        "role": "neutral",
+        "displayName": "Ink Cyan 03",
+        "canonical": "#10232c",
+        "tonalRamp": ["#08151a", "#10232c", "#17323e", "#204553", "#316072", "#4a8497", "#7fafbd", "#c3dbe2"]
+      },
+      "ink-cyan-line": {
+        "role": "neutral",
+        "displayName": "Ink Cyan Line",
+        "canonical": "#1c3039",
+        "tonalRamp": ["#0c161a", "#12222a", "#1c3039", "#26424d", "#365d6c", "#4f8291", "#84aeba", "#c6dde3"]
+      },
+      "paper-00": {
+        "role": "neutral",
+        "displayName": "Paper 00",
+        "canonical": "#f2f6f7",
+        "tonalRamp": ["#131b1d", "#222f32", "#3a4c50", "#5c7378", "#8ba3a8", "#bcd0d4", "#dfeaec", "#f2f6f7"]
+      },
+      "paper-01": {
+        "role": "neutral",
+        "displayName": "Paper 01",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#141414", "#262626", "#404040", "#666666", "#949494", "#c4c4c4", "#e6e6e6", "#ffffff"]
+      },
+      "paper-02": {
+        "role": "neutral",
+        "displayName": "Paper 02",
+        "canonical": "#edf5f5",
+        "tonalRamp": ["#121a1a", "#213030", "#38504f", "#597877", "#88a7a6", "#bad3d2", "#dcecec", "#edf5f5"]
+      },
+      "paper-line": {
+        "role": "neutral",
+        "displayName": "Paper Line",
+        "canonical": "#dbe6e8",
+        "tonalRamp": ["#111819", "#1f2c2e", "#354749", "#556e71", "#839c9f", "#b4c9cc", "#d0dfe1", "#dbe6e8"]
+      },
+      "text-dark": {
+        "role": "neutral",
+        "displayName": "Text on Ink",
+        "canonical": "#eaf2f5",
+        "tonalRamp": ["#131a1c", "#222d31", "#3a4a4f", "#5c7076", "#8ba0a6", "#bccdd2", "#dde9ec", "#eaf2f5"]
+      },
+      "text-light": {
+        "role": "neutral",
+        "displayName": "Text on Paper",
+        "canonical": "#14252c",
+        "tonalRamp": ["#0a1216", "#14252c", "#1e373f", "#2b4d58", "#3f6d7b", "#5b95a5", "#8dbcc8", "#c8e0e6"]
+      },
+      "muted-dark": {
+        "role": "neutral",
+        "displayName": "Muted on Ink",
+        "canonical": "#81939d",
+        "tonalRamp": ["#131719", "#212729", "#374145", "#566469", "#81939d", "#a3b2ba", "#c6d0d5", "#e6ebed"]
+      },
+      "muted-light": {
+        "role": "neutral",
+        "displayName": "Muted on Paper",
+        "canonical": "#687b84",
+        "tonalRamp": ["#0f1315", "#1b2224", "#2e393d", "#485a60", "#687b84", "#8fa1a9", "#b8c5ca", "#dfe6e9"]
+      },
+      "live-green": {
+        "role": "tertiary",
+        "displayName": "Live Green",
+        "canonical": "#26c281",
+        "tonalRamp": ["#052a1c", "#07452d", "#095e3e", "#0e8a5b", "#26c281", "#54d69f", "#8fe8c2", "#cdf6e4"]
+      },
+      "live-green-soft": {
+        "role": "tertiary",
+        "displayName": "Live Green Soft",
+        "canonical": "#3ad6a0",
+        "tonalRamp": ["#062e22", "#094a37", "#0c644a", "#118f6b", "#19b587", "#3ad6a0", "#7ee7c3", "#c4f6e5"]
+      },
+      "alert-coral": {
+        "role": "tertiary",
+        "displayName": "Alert Coral",
+        "canonical": "#e87575",
+        "tonalRamp": ["#3a1213", "#571b1c", "#762526", "#a63636", "#cf5252", "#e87575", "#f3a4a4", "#fbd6d6"]
+      },
+      "alert-coral-lit": {
+        "role": "tertiary",
+        "displayName": "Alert Coral Lit",
+        "canonical": "#ff8181",
+        "tonalRamp": ["#411314", "#601d1e", "#82282a", "#b53a3b", "#e05b5c", "#ff8181", "#ffaaaa", "#ffd9d9"]
+      },
+      "alert-crimson": {
+        "role": "tertiary",
+        "displayName": "Alert Crimson",
+        "canonical": "#dc5261",
+        "tonalRamp": ["#380d13", "#54141d", "#721c27", "#a02836", "#c53c4c", "#dc5261", "#ea8b95", "#f7ccd1"]
+      },
+      "caution-amber": {
+        "role": "tertiary",
+        "displayName": "Caution Amber",
+        "canonical": "#d5a94c",
+        "tonalRamp": ["#33260c", "#4d3a13", "#6a501b", "#96712a", "#bb8d38", "#d5a94c", "#e6c684", "#f5e5c1"]
+      },
+      "route-blue": {
+        "role": "secondary",
+        "displayName": "Route Blue",
+        "canonical": "#4f9cff",
+        "tonalRamp": ["#0b1f3d", "#10305c", "#16427e", "#1e5cb0", "#2a7ce0", "#4f9cff", "#8ec0ff", "#cee1ff"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Public subscription page hero only. Tightly tracked at -2.4px; the near-collision is deliberate." },
+      "headline": { "displayName": "Headline", "purpose": "Section heads on the public page." },
+      "title": { "displayName": "Title", "purpose": "App header page titles, card headings, modal titles." },
+      "body": { "displayName": "Body", "purpose": "The 14px base. Descriptive paragraphs cap around 510-620px." },
+      "caption": { "displayName": "Caption", "purpose": "Hints, muted descriptions, secondary card text." },
+      "label": { "displayName": "Label", "purpose": "Uppercase overlines, nav group headers, eyebrows, stat captions. Always muted or accent, never primary text." },
+      "mono": { "displayName": "Mono", "purpose": "Machine truth only: rules, YAML, subscription URLs, server addresses, proxy identifiers." }
+    },
+    "shadows": [
+      { "name": "ambient-card", "value": "0 18px 50px #0004", "purpose": "Default on panels, metrics, profiles. Atmosphere, not separation. Light theme: 0 16px 40px #16434a12." },
+      { "name": "card-hover", "value": "0 18px 45px #0005", "purpose": "Paired with a border shift to color-mix(in srgb, var(--accent) 35%, var(--line)). The border is the real signal." },
+      { "name": "floating-menu", "value": "0 18px 50px #0008", "purpose": "Select and combobox dropdowns." },
+      { "name": "modal", "value": "0 30px 90px #0009", "purpose": "Dialogs only." },
+      { "name": "focus-ring", "value": "0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent)", "purpose": "Every focused input, select, and combobox, alongside border-color: var(--accent). Composite fields apply it via :focus-within." },
+      { "name": "identity-glow", "value": "0 0 22px #14b8a633", "purpose": "The logo tile. The phosphor quality; reserved for identity marks." },
+      { "name": "icon-glow", "value": "0 8px 25px #14b8a638", "purpose": "Modal gradient icon tiles and the public brand mark." },
+      { "name": "status-glow", "value": "0 0 9px #26c281", "purpose": "Live status dots. Green, never teal." },
+      { "name": "danger-glow", "value": "0 8px 25px #e34f5a38", "purpose": "The destructive modal's icon tile." }
+    ],
+    "motion": [
+      { "name": "ease-spring", "value": "cubic-bezier(.22,1,.36,1)", "purpose": "Anything that enters, presses, or reveals." },
+      { "name": "ease-smooth", "value": "cubic-bezier(.4,0,.2,1)", "purpose": "Color, border, and theme transitions." },
+      { "name": "press", "value": "transform: scale(.965); transition-duration: .08s", "purpose": "Universal button active state. Fast and small." },
+      { "name": "interaction", "value": ".18s-.28s", "purpose": "Hover, focus, border, and color changes." },
+      { "name": "entrance", "value": ".32s-.42s", "purpose": "pageEnter, cardEnter, modalIn, revealPanel." },
+      { "name": "stagger", "value": ".04s", "purpose": "Delay increment across the first four sibling cards in a grid." },
+      { "name": "hero", "value": ".55s-.65s", "purpose": "welcomeEnter and publicRise." },
+      { "name": "reduced-motion", "value": "@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}", "purpose": "Global neutralizer. Every new effect must survive it." }
+    ],
+    "breakpoints": [
+      { "name": "admin-collapse", "value": "1100px" },
+      { "name": "icon-rail", "value": "1000px" },
+      { "name": "single-column", "value": "900px" },
+      { "name": "bottom-rail", "value": "700px" },
+      { "name": "compact-public", "value": "620px" },
+      { "name": "compact-form", "value": "560px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The identity gradient. Gradient is what makes a button primary — a flat teal fill is a different component.",
+      "html": "<button class=\"ds-btn-primary\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M8 12h8M12 8v8\"/></svg>Добавить подписку</button>",
+      "css": ".ds-btn-primary{font:600 14px Manrope,system-ui;border:0;background:linear-gradient(135deg,var(--accent,#14b8a6),var(--accent2,#0d9488));color:#fff;padding:10px 15px;border-radius:7px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;transition:transform .18s cubic-bezier(.22,1,.36,1),filter .2s cubic-bezier(.4,0,.2,1),box-shadow .2s cubic-bezier(.4,0,.2,1)}.ds-btn-primary svg{width:18px;height:18px}.ds-btn-primary:hover{filter:brightness(1.08)}.ds-btn-primary:active{transform:scale(.965);transition-duration:.08s}.ds-btn-primary:focus-visible{outline:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#14b8a6) 35%,transparent)}.ds-btn-primary:disabled{opacity:.55;cursor:not-allowed}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The default action shape and the most common button in the system. Panel2 fill, hairline border.",
+      "html": "<button class=\"ds-btn-secondary\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 12a9 9 0 1 1-2.64-6.36\"/><path d=\"M21 3v6h-6\"/></svg>Обновить</button>",
+      "css": ".ds-btn-secondary{font:500 14px Manrope,system-ui;border:1px solid var(--line,#1c3039);background:var(--panel2,#10232c);color:var(--text,#eaf2f5);border-radius:7px;padding:8px 11px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;transition:transform .18s cubic-bezier(.22,1,.36,1),border-color .2s cubic-bezier(.4,0,.2,1),filter .2s cubic-bezier(.4,0,.2,1)}.ds-btn-secondary svg{width:18px;height:18px}.ds-btn-secondary:hover{filter:brightness(1.08);border-color:color-mix(in srgb,var(--accent,#14b8a6) 45%,var(--line,#1c3039))}.ds-btn-secondary:active{transform:scale(.965);transition-duration:.08s}.ds-btn-secondary:focus-visible{outline:0;border-color:var(--accent,#14b8a6);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#14b8a6) 15%,transparent)}"
+    },
+    {
+      "name": "Destructive Confirm Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "The committed destructive step. The affordance that opens it is coral text on a secondary shell; this is the escalation.",
+      "html": "<button class=\"ds-btn-danger\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6\"/></svg>Удалить подписку</button>",
+      "css": ".ds-btn-danger{font:600 14px Manrope,system-ui;border:1px solid #b94050;background:linear-gradient(135deg,#dc5261,#a92d40);color:#fff;border-radius:8px;padding:9px 14px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;transition:transform .18s cubic-bezier(.22,1,.36,1),filter .2s cubic-bezier(.4,0,.2,1)}.ds-btn-danger svg{width:18px;height:18px}.ds-btn-danger:hover{filter:brightness(1.08)}.ds-btn-danger:active{transform:scale(.965);transition-duration:.08s}.ds-btn-danger:focus-visible{outline:0;box-shadow:0 0 0 3px #dc526155}.ds-btn-danger:disabled{opacity:.5;cursor:not-allowed}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Recessed to --bg below the panel it sits on. Focus lights the border and adds a 3px accent ring.",
+      "html": "<label class=\"ds-field\"><span>Ссылка на подписку</span><input class=\"ds-input\" type=\"url\" placeholder=\"https://provider.example/subscription\"></label>",
+      "css": ".ds-field{display:block;font:700 11px Manrope,system-ui;color:var(--text,#eaf2f5)}.ds-field>span{display:block;margin-bottom:8px}.ds-input{width:100%;height:38px;font:400 14px Manrope,system-ui;background:var(--bg,#071116);border:1px solid var(--line,#1c3039);color:var(--text,#eaf2f5);border-radius:7px;padding:10px 12px;outline:none;transition:border-color .28s cubic-bezier(.4,0,.2,1),box-shadow .28s cubic-bezier(.4,0,.2,1)}.ds-input::placeholder{color:var(--muted,#81939d)}.ds-input:focus{border-color:var(--accent,#14b8a6);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#14b8a6) 15%,transparent)}"
+    },
+    {
+      "name": "URL Field (composite)",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A wrapper-lit composite: the whole control takes the focus treatment via :focus-within, not the bare input.",
+      "html": "<div class=\"ds-urlfield\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M2 12h20M12 2a15 15 0 0 1 0 20a15 15 0 0 1 0-20\"/></svg><input type=\"url\" placeholder=\"https://provider.example/subscription\"></div>",
+      "css": ".ds-urlfield{display:flex;align-items:center;height:40px;border:1px solid var(--line,#1c3039);background:var(--bg,#071116);border-radius:8px;padding-left:12px;transition:border-color .28s cubic-bezier(.4,0,.2,1),box-shadow .28s cubic-bezier(.4,0,.2,1)}.ds-urlfield>svg{width:18px;height:18px;flex:none;color:var(--muted,#81939d)}.ds-urlfield input{flex:1;min-width:0;height:100%;border:0;background:transparent;color:var(--text,#eaf2f5);font:400 14px Manrope,system-ui;padding:0 12px;outline:none}.ds-urlfield input::placeholder{color:var(--muted,#81939d)}.ds-urlfield:focus-within{border-color:var(--accent,#14b8a6);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#14b8a6) 13%,transparent)}"
+    },
+    {
+      "name": "Select Trigger",
+      "kind": "custom",
+      "refersTo": "input",
+      "description": "The custom select's 38px trigger. Chevron rotates 180 degrees when the menu is open.",
+      "html": "<button class=\"ds-select\"><span>VLESS</span><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m6 9 6 6 6-6\"/></svg></button>",
+      "css": ".ds-select{width:100%;height:38px;font:500 14px Manrope,system-ui;border:1px solid var(--line,#1c3039);background:var(--bg,#071116);color:var(--text,#eaf2f5);border-radius:8px;padding:0 12px 0 13px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;text-align:left;transition:border-color .2s cubic-bezier(.4,0,.2,1),box-shadow .2s cubic-bezier(.4,0,.2,1)}.ds-select svg{width:16px;height:16px;flex:none;color:var(--muted,#81939d);transition:transform .22s cubic-bezier(.22,1,.36,1)}.ds-select:hover{border-color:color-mix(in srgb,var(--accent,#14b8a6) 40%,var(--line,#1c3039))}.ds-select:focus-visible,.ds-select[aria-expanded=true]{outline:0;border-color:var(--accent,#14b8a6);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#14b8a6) 13%,transparent)}.ds-select[aria-expanded=true] svg{transform:rotate(180deg)}"
+    },
+    {
+      "name": "Navigation Item",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Sidebar row. Hover slides 3px right; the active state is the most saturated non-button surface in the system.",
+      "html": "<nav class=\"ds-nav\"><span class=\"ds-nav-group\">ПОДПИСКИ</span><button class=\"ds-nav-item ds-on\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"3\" width=\"20\" height=\"8\" rx=\"2\"/><rect x=\"2\" y=\"13\" width=\"20\" height=\"8\" rx=\"2\"/><path d=\"M6 7h.01M6 17h.01\"/></svg>Основная подписка<svg class=\"ds-chev\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 18 6-6-6-6\"/></svg></button><button class=\"ds-nav-item\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z\"/></svg>Администрирование</button></nav>",
+      "css": ".ds-nav{padding:12px;background:var(--side,#09151b);width:236px}.ds-nav-group{display:block;color:#526872;font:800 10px Manrope,system-ui;letter-spacing:1.4px;padding:14px 12px 7px}.ds-nav-item{width:100%;border:0;background:none;display:flex;align-items:center;gap:11px;padding:10px 12px;font:500 14px Manrope,system-ui;color:var(--muted,#81939d);border-radius:7px;text-align:left;cursor:pointer;margin:2px 0;white-space:nowrap;overflow:hidden;transition:transform .18s cubic-bezier(.22,1,.36,1),background-color .2s cubic-bezier(.4,0,.2,1),color .2s cubic-bezier(.4,0,.2,1)}.ds-nav-item svg{width:17px;height:17px;flex:none}.ds-chev{margin-left:auto}.ds-nav-item:hover{background:var(--panel2,#10232c);color:var(--text,#eaf2f5);transform:translateX(3px)}.ds-nav-item.ds-on{color:#b9fff6;background:#10342f}.ds-nav-item.ds-on:hover{background:#124039}.ds-nav-item:focus-visible{outline:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#14b8a6) 15%,transparent)}"
+    },
+    {
+      "name": "Metric Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The dashboard stat tile. Hover shifts the border to 35% accent and scales the icon tile.",
+      "html": "<div class=\"ds-metric\"><span><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"/><path d=\"M14 2v6h6\"/></svg></span><div><b>12</b><small>Профилей</small></div></div>",
+      "css": ".ds-metric{display:flex;align-items:center;padding:18px;gap:13px;border:1px solid var(--line,#1c3039);background:var(--panel,#0d1b22);border-radius:10px;box-shadow:0 18px 50px #0004;font-family:Manrope,system-ui;color:var(--text,#eaf2f5);transition:border-color .28s cubic-bezier(.4,0,.2,1),box-shadow .28s cubic-bezier(.4,0,.2,1)}.ds-metric>span{width:38px;height:38px;flex:none;display:grid;place-items:center;border-radius:8px;background:#12342f;color:#3bd5c3;transition:transform .25s cubic-bezier(.22,1,.36,1)}.ds-metric>span svg{width:18px;height:18px}.ds-metric b{display:block;font-size:21px;font-weight:800}.ds-metric small{display:block;color:var(--muted,#81939d);font-size:11px}.ds-metric:hover{border-color:color-mix(in srgb,var(--accent,#14b8a6) 35%,var(--line,#1c3039));box-shadow:0 18px 45px #0005}.ds-metric:hover>span{transform:scale(1.06)}"
+    },
+    {
+      "name": "Live Chip",
+      "kind": "chip",
+      "refersTo": "chip-live",
+      "description": "The active-profile tag. Green, not teal — teal means selected, green means running.",
+      "html": "<span class=\"ds-chip-live\"><i></i>Активен</span>",
+      "css": ".ds-chip-live{display:inline-flex;align-items:center;height:25px;padding:5px 9px;font:600 10px Manrope,system-ui;color:#46d9a5;background:#153c32;border:1px solid #1b5948;border-radius:999px}.ds-chip-live i{display:inline-block;width:7px;height:7px;background:#26c281;border-radius:50%;margin-right:6px;box-shadow:0 0 9px #26c281}"
+    },
+    {
+      "name": "Network Progress Bar",
+      "kind": "custom",
+      "description": "Signature component. A 3px lit trace crossing the top of the viewport whenever the server is working.",
+      "html": "<div class=\"ds-netprogress ds-show\"><i></i></div>",
+      "css": ".ds-netprogress{position:relative;height:3px;width:100%;pointer-events:none;opacity:0;overflow:hidden;background:var(--bg,#071116);transition:opacity .18s}.ds-netprogress.ds-show{opacity:1}.ds-netprogress i{display:block;width:38%;height:100%;background:linear-gradient(90deg,transparent,var(--accent,#14b8a6),#6cf4d9,transparent);filter:drop-shadow(0 0 7px var(--accent,#14b8a6));animation:ds-netslide 1.05s ease-in-out infinite}@keyframes ds-netslide{from{transform:translateX(-110%)}to{transform:translateX(365%)}}"
+    },
+    {
+      "name": "Probe Result Row",
+      "kind": "custom",
+      "description": "One measured dialer route in the probe panel. The chosen route takes an accent border and 10% fill.",
+      "html": "<div class=\"ds-proberows\"><button class=\"ds-proberow ds-selected\"><span>🇳🇱 Amsterdam-02</span><b>148 мс</b></button><button class=\"ds-proberow\"><span>🇩🇪 Frankfurt-01</span><b>203 мс</b></button><button class=\"ds-proberow\" disabled><span>🇺🇸 New York-04</span><small class=\"ds-pending\">измеряем…</small></button></div>",
+      "css": ".ds-proberows{display:grid;gap:6px;font-family:Manrope,system-ui}.ds-proberow{min-width:0;height:36px;padding:0 10px;border:1px solid var(--line,#1c3039);background:var(--panel,#0d1b22);color:var(--text,#eaf2f5);border-radius:7px;display:flex;align-items:center;justify-content:space-between;gap:9px;font:500 12px Manrope,system-ui;cursor:pointer;transition:border-color .2s cubic-bezier(.4,0,.2,1),background-color .2s cubic-bezier(.4,0,.2,1),transform .18s cubic-bezier(.22,1,.36,1)}.ds-proberow span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-proberow b{color:var(--accent,#14b8a6);white-space:nowrap}.ds-proberow small{color:var(--muted,#81939d);white-space:nowrap}.ds-proberow:hover:not(:disabled){border-color:color-mix(in srgb,var(--accent,#14b8a6) 45%,var(--line,#1c3039))}.ds-proberow:active:not(:disabled){transform:scale(.965);transition-duration:.08s}.ds-proberow.ds-selected{border-color:var(--accent,#14b8a6);background:color-mix(in srgb,var(--accent,#14b8a6) 10%,var(--panel,#0d1b22))}.ds-proberow:disabled{opacity:.52;cursor:not-allowed}.ds-pending{animation:ds-pendingpulse 1.2s ease-in-out infinite}@keyframes ds-pendingpulse{50%{opacity:.42}}"
+    },
+    {
+      "name": "Callout",
+      "kind": "custom",
+      "refersTo": "callout",
+      "description": "The explanatory note. One of only two 2px strokes in the system, and it is a mark rather than an enclosure.",
+      "html": "<div class=\"ds-callout\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4M12 8h.01\"/></svg><div><b>Замена proxy-groups</b><p>Указанные группы полностью заменят upstream. Оставьте поле пустым, чтобы сохранить исходные.</p></div></div>",
+      "css": ".ds-callout{display:flex;gap:10px;padding:13px;background:#10302d;border-left:2px solid var(--accent,#14b8a6);color:#b9e7e0;font-family:Manrope,system-ui;animation:ds-softreveal .35s cubic-bezier(.22,1,.36,1) both}.ds-callout>svg{width:18px;height:18px;flex:none;margin-top:2px}.ds-callout b{font-size:12px}.ds-callout p{font-size:11px;margin:4px 0 0;line-height:1.5}@keyframes ds-softreveal{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Glass Control Plane",
+    "overview": "Mihomo Hub looks like what it is: infrastructure you can see through. Translucent panels float above a faint technical grid, and the grid never fully disappears behind them — a 64px lattice bleeds through the public page, a backdrop-filter: blur(16px) header lets the page scroll underneath itself, and modal chrome frosts rather than blocks. The metaphor is a control plane rendered in glass: the machinery is visible, the interface is the pane you reach through to touch it.\n\nDepth is read from the surface stack, not from shadow. Everything rises out of an almost-black blue-green ground (#071116) through three progressively lighter tints, and lightness alone tells you what sits on top of what. Hairline borders draw the structure; large soft shadows are atmosphere, never the thing that separates a card from its background. This is why the system survives its light theme intact — the stack inverts to paper-white and the hierarchy still reads.\n\nColor is scarce on purpose. The near-black is the resting state and phosphor teal is a lit trace across it, appearing only where something is genuinely live, selected, focused, or succeeding. The density is tight and instrument-like: 38px controls, 14px body, 10px uppercase labels, ui-monospace wherever the user is looking at real config. The register is an operator's console — not a consumer VPN app, and never a growth dashboard.",
+    "keyCharacteristics": [
+      "Tonal surface stack (four steps) as the primary depth signal; shadows are ambient only",
+      "Phosphor teal as a scarce, lit signal against an ink-cyan ground",
+      "Hairline 1px borders (--line) doing all structural separation",
+      "Glass as chrome: backdrop blur on headers, modals, and sticky footers, not on content",
+      "Instrument density — 38px controls, tight 6-13px gaps, monospace for anything real",
+      "Spring-eased micro-response: 0.965 press scale, 3px focus rings, 0.18-0.28s transitions",
+      "Two themes driven from one custom-property layer, at equal quality"
+    ],
+    "rules": [
+      { "name": "The Scarce Signal Rule", "body": "Phosphor teal marks state, never decoration. It is legal on focus rings, active tabs, selected rows, live progress, and primary actions — and nowhere else. If a screen has more than one teal-filled surface competing for the eye, one of them is wrong.", "section": "colors" },
+      { "name": "The Derived Tint Rule", "body": "Never introduce a new teal hex. Every tinted surface, border, and glow is color-mix(in srgb, var(--accent) N%, ...) — 5-10% for fills, 34-55% for borders, 13-15% for focus rings. The accent has exactly one source of truth per theme.", "section": "colors" },
+      { "name": "The Two Greens Rule", "body": "Teal means selected; green means running. They never substitute for one another. A status dot is green (#26c281); a chosen tab is teal.", "section": "colors" },
+      { "name": "The Inverted Stack Rule", "body": "No color is written directly into a component. Both themes redeclare the same ten properties on :root and html[data-theme=light]; a component that hardcodes #0d1b22 is a light-theme bug that has not happened yet.", "section": "colors" },
+      { "name": "The Machine Truth Rule", "body": "Anything the user could copy, paste, or type into a config file is set in ui-monospace. Anything the interface says about it is set in Manrope. Mixing them inverts the signal.", "section": "typography" },
+      { "name": "The Two Extremes Rule", "body": "Hierarchy comes from the distance between 800-weight/negative-tracked display and 800-weight/positive-tracked micro-labels. The middle of the scale stays at 400-700 with normal tracking. Do not add tracking to body text.", "section": "typography" },
+      { "name": "The Cyrillic Fit Rule", "body": "Copy is Russian; Cyrillic runs 10-15% longer than the equivalent English. Every label, button, and tab must survive its longest realistic Russian string without truncation — test with the real word, not a placeholder.", "section": "typography" },
+      { "name": "The 38px Control Rule", "body": "Every interactive field — input, select trigger, combobox, option toggle, platform picker — is 38px tall. New controls match it or they visibly break the row.", "section": "layout" },
+      { "name": "The Bottom Rail Rule", "body": "Below 700px the sidebar is a bottom tab bar, not a hamburger drawer. Navigation stays permanently visible and thumb-reachable; anything that would require opening a menu to see where you are is wrong for this product.", "section": "layout" },
+      { "name": "The Aligned Rule Rule", "body": "The 73px header height is shared by the sidebar brand block and the main header so their bottom borders form one unbroken hairline. Changing one without the other breaks the shell's most visible alignment.", "section": "layout" },
+      { "name": "The Tonal-First Rule", "body": "If a new surface needs to read as 'on top', give it the next step up the stack. Reach for shadow only after tonal separation and a hairline have both been tried.", "section": "elevation" },
+      { "name": "The Glass-Is-Chrome Rule", "body": "backdrop-filter belongs to things that float over scrolling content — headers, modals, sticky action bars. A content card that blurs its background is imitating chrome it isn't.", "section": "elevation" },
+      { "name": "The Border-Speaks-First Rule", "body": "On hover and selection, the border changes before anything else. color-mix(in srgb, var(--accent) 35-70%, var(--line)) is the vocabulary; background tint (5-10% accent) follows, and shadow follows that.", "section": "elevation" },
+      { "name": "The Radius Ladder Rule", "body": "Radius is a function of size: 6-7px small, 8-9px medium, 10px panel, 13px feature, 18-20px hero card, 999px pill. A component's radius must sit below its container's.", "section": "shapes" },
+      { "name": "The One-Pixel Rule", "body": "Structural borders are 1px. The only 2px strokes in the system are the active-tab underline and the callout's left rule — both indicators, never enclosures.", "section": "shapes" },
+      { "name": "The Dashed-Means-Empty Rule", "body": "A dashed border means an affordance to create or a slot with nothing in it. It never decorates a filled surface.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do derive every tinted surface from color-mix(in srgb, var(--accent) N%, ...) rather than introducing a new teal hex — 5-10% for fills, 34-55% for borders, 13-15% for focus rings.",
+      "Do give new interactive controls a 38px height and a 7-9px radius so they align with the existing field rows.",
+      "Do reach for the next tonal step (--bg → --panel → --panel2) before reaching for a shadow when something needs to read as raised.",
+      "Do pair border-color: var(--accent) with the 3px accent-at-15% ring on every focusable control, and apply it via :focus-within on composite fields so the whole control lights.",
+      "Do set anything copyable or machine-authored — rules, YAML, URLs, server addresses — in ui-monospace at 10-12px.",
+      "Do escalate destructive actions in two steps: coral text on a secondary shell for the affordance, crimson gradient for the committed confirm.",
+      "Do define every new color through the :root / html[data-theme=light] property pair, and check the light theme in the same pass.",
+      "Do test every label with its longest realistic Russian string; Cyrillic runs long and the interface is dense.",
+      "Do stagger sibling card entrances at 0.04s with cardEnter so grids assemble rather than appear.",
+      "Do keep backdrop-filter on floating chrome — headers, modal backdrops, sticky action bars, public glass cards."
+    ],
+    "donts": [
+      "Don't use phosphor teal as decoration. It marks live, selected, focused, or succeeding state, and if two teal-filled surfaces compete on one screen, one is wrong.",
+      "Don't substitute teal for green. Teal is selected; #26c281 green is running. A status indicator is never teal.",
+      "Don't hardcode a hex into a component. Both themes redeclare the same ten custom properties; a literal color is a light-theme bug waiting to be found.",
+      "Don't make shadows structural. --shadow is atmosphere; if a card only separates from its background because of its shadow, the tonal step is missing.",
+      "Don't introduce a 2px structural border. The only 2px strokes are the active-tab underline and the callout's left rule, and both are indicators, not enclosures.",
+      "Don't blur a content card's background. Glass is chrome; content surfaces are opaque tonal steps.",
+      "Don't loosen the display tracking. -2.4px at hero size is the intended near-collision, not an accident.",
+      "Don't replace the mobile bottom rail with a hamburger drawer. Below 700px navigation stays permanently visible; hiding where-you-are behind a menu is wrong for this product.",
+      "Don't design in the consumer-VPN register: no giant glowing shield, no flag grids, no single hero connect-button, no reassurance copy. The operator wants controls, not comfort.",
+      "Don't add a CSS framework, utility classes, or a component library. The system is hand-written CSS custom properties in one stylesheet, and that is a durable constraint.",
+      "Don't ship a motion effect without confirming the prefers-reduced-motion block still neutralizes it."
+    ]
+  }
+}
